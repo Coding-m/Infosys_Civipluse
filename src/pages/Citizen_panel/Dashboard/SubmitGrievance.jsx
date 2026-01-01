@@ -20,7 +20,6 @@ const SubmitGrievance = ({ setComplaints }) => {
     location: "",
     citizenName: "",
     citizenPhone: "",
-    showCitizenInfoToAdmin: true,
   });
 
   const [coordinates, setCoordinates] = useState(null);
@@ -120,7 +119,6 @@ const SubmitGrievance = ({ setComplaints }) => {
       location: "",
       citizenName: "",
       citizenPhone: "",
-      showCitizenInfoToAdmin: true,
     });
     setCoordinates(null);
     setImageFile(null);
@@ -418,31 +416,6 @@ const SubmitGrievance = ({ setComplaints }) => {
           </div>
         </div>
 
-        {/* Checkbox */}
-        <div style={{
-          padding: "1rem",
-          background: "color-mix(in srgb, var(--primary) 5%, transparent)",
-          borderRadius: "14px",
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "0.75rem",
-        }}>
-          <input
-            id="checkbox"
-            type="checkbox"
-            checked={formData.showCitizenInfoToAdmin}
-            name="showCitizenInfoToAdmin"
-            onChange={handleInputChange}
-            style={{
-              marginTop: "0.25rem",
-              cursor: "pointer",
-              accentColor: "var(--primary)",
-            }}
-          />
-          <label htmlFor="checkbox" style={{ cursor: "pointer", fontSize: "0.9rem", color: "var(--text-primary)" }}>
-            Share my contact information with administrators to help resolve this issue faster
-          </label>
-        </div>
       </div>
 
       {/* Action Buttons */}
