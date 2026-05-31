@@ -1,181 +1,133 @@
 import React, { useState } from "react";
 import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  InputAdornment,
-  Grid
+  Box, Typography, TextField, Button,
+  InputAdornment, Grid, MenuItem,
 } from "@mui/material";
 import {
-  User,
-  Mail,
-  Lock,
-  Phone,
-  Building2,
-  UserPlus
+  User, Mail, Lock, Phone, Building2, UserPlus, MapPin,
 } from "lucide-react";
 import { toast } from "react-toastify";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
+const DEPARTMENTS = ["Electricity", "Water", "Roads", "Sanitation", "Traffic", "Other"];
+
+const EMPTY_FORM = {
+  name: "", email: "", password: "",
+  phoneNo: "", address: "", age: "", department: "",
+};
+
 const AdminCreateOfficer = () => {
-  const [officerData, setOfficerData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    phoneNo: "",
-    department: "",
-  });
+  const [officerData, setOfficerData] = useState(EMPTY_FORM);
 
   const handleChange = (e) => {
     setOfficerData({ ...officerData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) { toast.error("You are not logged in as Admin"); return; }
+
+    const allFilled = Object.values(officerData).every((v) => String(v).trim() !== "");
+    if (!allFilled) { toast.error("All fields are required"); return; }
+
+    if (Number(officerData.age) <= 0) { toast.error("Age must be a valid number"); return; }
+
     try {
-      const token = localStorage.getItem("token");
-
-      if (!token) {
-        toast.error("You are not logged in as Admin");
-        return;
-      }
-
-      const res = await fetch("http://localhost:8081/api/admin/create-officer", {
+      const res = await fetch(`${API_URL}/api/admin/create-officer`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(officerData),
+        body: JSON.stringify({ ...officerData, age: Number(officerData.age) }),
       });
 
       if (!res.ok) {
-        let errorMsg;
         const contentType = res.headers.get("content-type");
-
-        if (contentType && contentType.includes("application/json")) {
-          const data = await res.json();
-          errorMsg = data.message || JSON.stringify(data);
-        } else {
-          errorMsg = await res.text();
-        }
-
-        throw new Error(errorMsg || "Failed to create officer");
+        const errorMsg = contentType?.includes("application/json")
+          ? ((await res.json()).message || "Failed to create officer")
+          : (await res.text()) || "Failed to create officer";
+        throw new Error(errorMsg);
       }
 
-      let data;
       const contentType = res.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        data = (await res.json()).message || "Officer account created successfully!";
-      } else {
-        data = await res.text();
-      }
+      const successMsg = contentType?.includes("application/json")
+        ? (await res.json()).message
+        : await res.text();
 
-      toast.success(data);
-
-      setOfficerData({
-        name: "",
-        email: "",
-        password: "",
-        phoneNo: "",
-        department: "",
-      });
+      toast.success(successMsg || "Officer account created successfully!");
+      setOfficerData(EMPTY_FORM);
     } catch (err) {
-      console.error(err);
-      toast.error(err.message || "Admin authorization failed or server error");
+      toast.error(err.message || "Server error");
     }
   };
 
   return (
-    <Box sx={{
-      width: "100%",
-      background: "var(--surface)",
-      padding: "3rem",
-      borderRadius: "32px",
-      border: "1px solid var(--border-soft)",
-      boxShadow: "var(--card-shadow)",
-      position: "relative",
-      overflow: "hidden"
-    }}>
+    <Box sx={{ width: "100%", background: "var(--surface)", padding: "3rem", borderRadius: "32px", border: "1px solid var(--border-soft)", boxShadow: "var(--card-shadow)" }}>
 
+      {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 4 }}>
-        <div style={{
-          padding: "12px",
-          borderRadius: "16px",
-          background: "color-mix(in srgb, var(--primary) 10%, transparent)",
-          color: "var(--primary)"
-        }}>
+        <Box sx={{ padding: "12px", borderRadius: "16px", background: "color-mix(in srgb, var(--primary) 10%, transparent)", color: "var(--primary)" }}>
           <UserPlus size={32} />
-        </div>
-        <div>
-          <Typography variant="h4" fontWeight="800" sx={{ color: "var(--text-primary)", mb: 0.5 }}>
+        </Box>
+        <Box>
+          <Typography variant="h4" fontWeight="800" sx={{ color: "var(--text-primary)" }}>
             Add Officer
           </Typography>
           <Typography variant="body2" color="var(--text-muted)" fontWeight="600">
             Create a new department official account
           </Typography>
-        </div>
+        </Box>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 2 }}>
+      {/* Form */}
+      <Grid container spacing={3}>
         {[
-          { label: "Full Name", name: "name", icon: User, type: "text", xs: 12, md: 6 },
-          { label: "Email Address", name: "email", icon: Mail, type: "email", xs: 12, md: 6 },
-          { label: "Secure Password", name: "password", icon: Lock, type: "password", xs: 12, md: 6 },
-          { label: "Phone Number", name: "phoneNo", icon: Phone, type: "tel", xs: 12, md: 6 },
-          { label: "Department Name", name: "department", icon: Building2, type: "text", xs: 12 },
+          { label: "Full Name",     name: "name",     icon: User,  type: "text",     md: 6 },
+          { label: "Email Address", name: "email",    icon: Mail,  type: "email",    md: 6 },
+          { label: "Password",      name: "password", icon: Lock,  type: "password", md: 6 },
+          { label: "Phone Number",  name: "phoneNo",  icon: Phone, type: "tel",      md: 6 },
+          { label: "Address",       name: "address",  icon: MapPin,type: "text",     md: 12 },
+          { label: "Age",           name: "age",      icon: User,  type: "number",   md: 6 },
         ].map((field) => (
-          <Grid item xs={field.xs} md={field.md} key={field.name}>
+          <Grid item xs={12} md={field.md} key={field.name}>
             <TextField
-              key={field.name}
               fullWidth
               label={field.label}
               name={field.name}
               type={field.type}
-              variant="outlined"
               value={officerData[field.name]}
               onChange={handleChange}
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "16px",
-                  color: "var(--text-primary)",
-                  "& fieldset": { borderColor: "var(--border)" },
-                  "&:hover fieldset": { borderColor: "var(--primary)" },
-                },
-                "& .MuiInputLabel-root": { color: "var(--text-muted)" },
-                "& .MuiInputLabel-root.Mui-focused": { color: "var(--primary)" },
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <field.icon size={20} color="var(--text-muted)" />
-                  </InputAdornment>
-                ),
-              }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><field.icon size={20} /></InputAdornment> }}
+              sx={{ "& .MuiOutlinedInput-root": { borderRadius: "16px" } }}
             />
           </Grid>
         ))}
+
+        <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth select
+            label="Department"
+            name="department"
+            value={officerData.department}
+            onChange={handleChange}
+            InputProps={{ startAdornment: <InputAdornment position="start"><Building2 size={20} /></InputAdornment> }}
+            sx={{ "& .MuiOutlinedInput-root": { borderRadius: "16px" } }}
+          >
+            <MenuItem value="">Select a department...</MenuItem>
+            {DEPARTMENTS.map((dept) => (
+              <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+            ))}
+          </TextField>
+        </Grid>
       </Grid>
 
       <Button
-        fullWidth
-        variant="contained"
-        size="large"
+        fullWidth variant="contained" size="large"
+        sx={{ mt: 4, py: 1.8, borderRadius: "16px", fontWeight: "700", textTransform: "none", background: "linear-gradient(135deg, var(--primary), var(--primary-strong))" }}
         onClick={handleSubmit}
-        sx={{
-          mt: 2,
-          py: 1.8,
-          borderRadius: "16px",
-          textTransform: "none",
-          fontSize: "1.1rem",
-          fontWeight: "700",
-          background: "linear-gradient(135deg, var(--primary), var(--primary-strong))",
-          color: "#fff",
-          boxShadow: "0 15px 30px color-mix(in srgb, var(--primary) 25%, transparent)",
-          "&:hover": {
-            boxShadow: "0 20px 40px color-mix(in srgb, var(--primary) 30%, transparent)",
-            transform: "translateY(-1px)"
-          }
-        }}
       >
         Generate Officer Account
       </Button>

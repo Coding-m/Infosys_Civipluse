@@ -1,148 +1,101 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import PropTypes from "prop-types";
 import {
-  Box,
-  Modal,
-  Typography,
-  TextField,
-  Button,
-  Input,
-  Divider,
-  MenuItem,
-  CircularProgress,
-  Snackbar,
-  Alert,
+  Box, Modal, Typography, TextField, Button, Input,
+  Divider, MenuItem, CircularProgress, Snackbar, Alert,
 } from "@mui/material";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
 import L from "leaflet";
 
-// Fix Leaflet default marker icons
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerIcon   from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
+  iconUrl:       markerIcon,
+  shadowUrl:     markerShadow,
 });
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 const modalStyle = {
-  position: "absolute",
-  top: "50%",
-  left: "50%",
+  position: "absolute", top: "50%", left: "50%",
   transform: "translate(-50%, -50%)",
-  width: 600,
-  bgcolor: "background.paper",
-  borderRadius: 2,
-  boxShadow: 24,
-  p: 3,
+  width: 600, bgcolor: "background.paper",
+  borderRadius: 2, boxShadow: 24, p: 3,
 };
 
 const statusOptions = ["PENDING", "IN_PROGRESS", "RESOLVED"];
 
 const UpdateGrievanceModal = ({ open, onClose, grievance, onSubmit }) => {
-  const data = grievance || {};
+  const data       = useMemo(() => grievance || {}, [grievance]);
   const isResolved = data.status === "RESOLVED";
 
-  const [expectedDate, setExpectedDate] = useState(
-    data.expectedCompletionDate ? new Date(data.expectedCompletionDate).toISOString().split("T")[0] : ""
-  );
-  const [remarks, setRemarks] = useState(data.remarks || "");
-  const [status, setStatus] = useState(data.status || "PENDING");
-  const [photo, setPhoto] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [expectedDate, setExpectedDate] = useState("");
+  const [remarks, setRemarks]           = useState("");
+  const [status, setStatus]             = useState("PENDING");
+  const [photo, setPhoto]               = useState(null);
+  const [loading, setLoading]           = useState(false);
+  const [snackbar, setSnackbar]         = useState({ open: false, message: "", severity: "success" });
 
+  useEffect(() => {
+    setExpectedDate(
+      data.expectedCompletionDate
+        ? new Date(data.expectedCompletionDate).toISOString().split("T")[0]
+        : ""
+    );
+    setRemarks(data.officerRemark || "");
+    setStatus(data.status || "PENDING");
+    setPhoto(null);
+  }, [data]);
 
- console.log("Grievance data:", data);
+  const originalDate = data.expectedCompletionDate
+    ? new Date(data.expectedCompletionDate).toISOString().split("T")[0]
+    : "";
 
-
-  // Check if any field changed
   const isDirty =
-    remarks !== (data.remarks || "") ||
-    expectedDate !== (data.expectedCompletionDate ? new Date(data.expectedCompletionDate).toISOString().split("T")[0] : "") ||
-    status !== (data.status || "PENDING") ||
-    photo;
+    remarks      !== (data.officerRemark || "") ||
+    expectedDate !== originalDate ||
+    status       !== (data.status || "PENDING") ||
+    !!photo;
 
   const handleSubmit = async () => {
-    if (!isDirty) return; // nothing to update
+    if (!isDirty) return;
     setLoading(true);
     const token = localStorage.getItem("token");
-    let failed = false;
 
     try {
-      // 1️⃣ Update remark
-      if (remarks !== data.remarks && remarks) {
-        try {
-          await axios.put(
-            `http://localhost:8081/api/officer/complaints/${data.id}/remark`,
-            null,
-            { params: { remark: remarks }, headers: { Authorization: `Bearer ${token}` } }
-          );
-        } catch (err) {
-          console.error("Remark update failed", err);
-          failed = true;
-        }
+      const params = {};
+      if (remarks      !== (data.officerRemark || "")) params.remark       = remarks;
+      if (status       !== (data.status || "PENDING")) params.status       = status;
+      if (expectedDate !== originalDate)               params.expectedDate = expectedDate;
+
+      if (Object.keys(params).length > 0) {
+        await axios.put(
+          `${API_URL}/api/officer/complaints/${data.id}`,
+          null,
+          { params, headers: { Authorization: `Bearer ${token}` } }
+        );
       }
 
-      // 2️⃣ Update expected completion
-      if (expectedDate !== (data.expectedCompletionDate ? new Date(data.expectedCompletionDate).toISOString().split("T")[0] : "") && expectedDate) {
-        try {
-          await axios.put(
-            `http://localhost:8081/api/officer/complaints/${data.id}/expected-completion`,
-            null,
-            { params: { expectedDateTime: expectedDate }, headers: { Authorization: `Bearer ${token}` } }
-          );
-        } catch (err) {
-          console.error("Expected date update failed", err);
-          failed = true;
-        }
-      }
-
-      // 3️⃣ Update status
-      if (status !== data.status && status) {
-        try {
-          await axios.put(
-            `http://localhost:8081/api/officer/complaints/${data.id}/status`,
-            null,
-            { params: { status }, headers: { Authorization: `Bearer ${token}` } }
-          );
-        } catch (err) {
-          console.error("Status update failed", err);
-          failed = true;
-        }
-      }
-
-      // 4️⃣ Upload evidence
       if (photo) {
         const formData = new FormData();
         formData.append("file", photo);
-        try {
-          await axios.post(
-            `http://localhost:8081/api/officer/complaints/${data.id}/evidence`,
-            formData,
-            { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } }
-          );
-        } catch (err) {
-          console.error("Evidence upload failed", err);
-          failed = true;
-        }
+        await axios.post(
+          `${API_URL}/api/officer/complaints/${data.id}/evidence`,
+          formData,
+          { headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" } }
+        );
       }
 
-      // Show toast based on result
-      if (failed) {
-        setSnackbar({ open: true, message: "Some updates failed", severity: "error" });
-      } else {
-        setSnackbar({ open: true, message: "Complaint updated successfully", severity: "success" });
-        onClose();
-        await onSubmit(); // refresh parent list
-      }
-
-    } catch (err) {
-      console.error("Unexpected error", err);
+      setSnackbar({ open: true, message: "Complaint updated successfully", severity: "success" });
+      await onSubmit();
+      onClose();
+    } catch {
       setSnackbar({ open: true, message: "Update failed", severity: "error" });
     } finally {
       setLoading(false);
@@ -153,9 +106,7 @@ const UpdateGrievanceModal = ({ open, onClose, grievance, onSubmit }) => {
     <>
       <Modal open={open} onClose={onClose}>
         <Box sx={modalStyle}>
-          <Typography variant="h6" fontWeight="bold">
-            Update Complaint
-          </Typography>
+          <Typography variant="h6" fontWeight="bold">Update Complaint</Typography>
           <Divider sx={{ my: 2 }} />
 
           <Typography variant="body2" sx={{ mb: 2 }}>
@@ -173,11 +124,7 @@ const UpdateGrievanceModal = ({ open, onClose, grievance, onSubmit }) => {
 
           {data.latitude && data.longitude && (
             <Box sx={{ height: 150, mb: 2 }}>
-              <MapContainer
-                center={[data.latitude, data.longitude]}
-                zoom={15}
-                style={{ height: "100%", width: "100%" }}
-              >
+              <MapContainer center={[data.latitude, data.longitude]} zoom={15} style={{ height: "100%", width: "100%" }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <Marker position={[data.latitude, data.longitude]}>
                   <Popup>{data.location}</Popup>
@@ -216,7 +163,9 @@ const UpdateGrievanceModal = ({ open, onClose, grievance, onSubmit }) => {
             onChange={(e) => setPhoto(e.target.files[0])}
             sx={{ mb: 1 }}
           />
-          {photo && <Typography variant="body2" sx={{ mb: 2 }}>{photo.name}</Typography>}
+          {photo && (
+            <Typography variant="body2" sx={{ mb: 2 }}>{photo.name}</Typography>
+          )}
 
           <TextField
             select
@@ -228,9 +177,7 @@ const UpdateGrievanceModal = ({ open, onClose, grievance, onSubmit }) => {
             sx={{ mb: 3 }}
           >
             {statusOptions.map((s) => (
-              <MenuItem key={s} value={s}>
-                {s}
-              </MenuItem>
+              <MenuItem key={s} value={s}>{s}</MenuItem>
             ))}
           </TextField>
 
@@ -250,13 +197,19 @@ const UpdateGrievanceModal = ({ open, onClose, grievance, onSubmit }) => {
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       >
-        <Alert severity={snackbar.severity || "info"}>{snackbar.message}</Alert>
+        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
       </Snackbar>
     </>
-   
   );
+};
+
+UpdateGrievanceModal.propTypes = {
+  open:      PropTypes.bool.isRequired,
+  onClose:   PropTypes.func.isRequired,
+  grievance: PropTypes.object,
+  onSubmit:  PropTypes.func.isRequired,
 };
 
 export default UpdateGrievanceModal;

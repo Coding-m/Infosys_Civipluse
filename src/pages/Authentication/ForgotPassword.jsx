@@ -1,67 +1,64 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, User, Lock } from "lucide-react";
+import { toast } from "react-toastify";
 import {
-  citizenForgotPassword,
-  adminForgotPassword,
-  citizenResetPassword,
-  adminResetPassword,
+  citizenForgotPassword, adminForgotPassword,
+  citizenResetPassword,  adminResetPassword,
 } from "../../api/auth";
 
 export default function ForgotPassword() {
-  const { role } = useParams(); // <-- FIXED: read user/admin
-  const navigate = useNavigate();
+  const { role }   = useParams();
+  const navigate   = useNavigate();
 
-  const [step, setStep] = useState(1);
-  const [email, setEmail] = useState("");
+  const [step, setStep]             = useState(1);
+  const [email, setEmail]           = useState("");
   const [resetToken, setResetToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [message, setMessage]       = useState("");
+  const [loading, setLoading]       = useState(false);
 
-  // Step 1 - Request OTP
+  // ── Step 1 — Request OTP ──────────────────────────────────────────────────
   const handleRequestOTP = async (e) => {
     e.preventDefault();
-
-    if (!email) return alert("Please enter your email");
+    if (!email) { toast.error("Please enter your email"); return; }
 
     setLoading(true);
     try {
-      const res =
-        role === "admin"
-          ? await adminForgotPassword({ email })
-          : await citizenForgotPassword({ email });
+      const res = role === "admin"
+        ? await adminForgotPassword({ email })
+        : await citizenForgotPassword({ email });
 
       setMessage(res?.data?.message || "OTP sent to your email");
       setStep(2);
-    } catch (err) {
-      console.error(err);
+    } catch {
       setMessage("Failed to send OTP. Try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Step 2 - Reset password
+  // ── Step 2 — Reset password ───────────────────────────────────────────────
   const handleResetPassword = async (e) => {
     e.preventDefault();
-
-    if (!email || !resetToken || !newPassword)
-      return alert("All fields are required!");
+    if (!email || !resetToken || !newPassword) {
+      toast.error("All fields are required!");
+      return;
+    }
 
     setLoading(true);
     try {
-      const res =
-        role === "admin"
-          ? await adminResetPassword({ email, resetToken, newPassword })
-          : await citizenResetPassword({ email, resetToken, newPassword });
+      const res = role === "admin"
+        ? await adminResetPassword({ email, resetToken, newPassword })
+        : await citizenResetPassword({ email, resetToken, newPassword });
 
-      alert(res?.data?.message || "Password reset successful!");
+      toast.success(res?.data?.message || "Password reset successful!");
       navigate("/");
-    } catch (err) {
-      console.error(err);
-      alert("Invalid OTP or password. Try again.");
+    } catch {
+      toast.error("Invalid OTP or password. Try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -73,7 +70,6 @@ export default function ForgotPassword() {
           {step === 1 && (
             <>
               <p>Enter your email to receive OTP</p>
-
               <form className="portal-form" onSubmit={handleRequestOTP}>
                 <div className="text-field">
                   <label>Email</label>
@@ -88,17 +84,12 @@ export default function ForgotPassword() {
                     />
                   </div>
                 </div>
-
                 <div className="form-actions">
                   <button type="submit" className="primary-btn" disabled={loading}>
-                    {loading ? "Sending..." : "Send OTP"}
-                    <ArrowRight />
+                    {loading ? "Sending..." : "Send OTP"} <ArrowRight />
                   </button>
-                  <Link to="/" className="secondary-link">
-                    Back to Login
-                  </Link>
+                  <Link to="/" className="secondary-link">Back to Login</Link>
                 </div>
-
                 {message && <p className="info-message">{message}</p>}
               </form>
             </>
@@ -107,7 +98,6 @@ export default function ForgotPassword() {
           {step === 2 && (
             <>
               <p>Enter OTP and set a new password</p>
-
               <form className="portal-form" onSubmit={handleResetPassword}>
                 <div className="text-field">
                   <label>OTP</label>
@@ -119,7 +109,6 @@ export default function ForgotPassword() {
                     required
                   />
                 </div>
-
                 <div className="text-field">
                   <label>New Password</label>
                   <div className="input-with-icon">
@@ -133,15 +122,11 @@ export default function ForgotPassword() {
                     />
                   </div>
                 </div>
-
                 <div className="form-actions">
                   <button type="submit" className="primary-btn" disabled={loading}>
-                    {loading ? "Resetting..." : "Reset Password"}
-                    <ArrowRight />
+                    {loading ? "Resetting..." : "Reset Password"} <ArrowRight />
                   </button>
-                  <Link to="/" className="secondary-link">
-                    Back to Login
-                  </Link>
+                  <Link to="/" className="secondary-link">Back to Login</Link>
                 </div>
               </form>
             </>

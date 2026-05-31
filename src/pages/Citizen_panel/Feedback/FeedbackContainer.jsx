@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
+import PropTypes from "prop-types";
+
 import FeedbackList from "./FeedbackList";
 import FeedbackForm from "./FeedbackForm";
 
@@ -9,20 +11,29 @@ const FeedbackContainer = ({
 }) => {
   const [current, setCurrent] = useState(null);
 
-  useEffect(() => {
-    if (selectedComplaint) {
-      setCurrent(selectedComplaint);
-    }
-  }, [selectedComplaint]);
+  // Prefer parent-selected complaint first
+  const activeComplaint = useMemo(
+    () => selectedComplaint ?? current,
+    [selectedComplaint, current]
+  );
 
-  if (current) {
+  const handleSelectComplaint = useCallback((complaint) => {
+    setCurrent(complaint);
+  }, []);
+
+  const handleBack = useCallback(() => {
+    setCurrent(null);
+
+    if (clearSelection) {
+      clearSelection();
+    }
+  }, [clearSelection]);
+
+  if (activeComplaint) {
     return (
       <FeedbackForm
-        complaint={current}
-        onBack={() => {
-          setCurrent(null);
-          clearSelection();
-        }}
+        complaint={activeComplaint}
+        onBack={handleBack}
       />
     );
   }
@@ -30,9 +41,16 @@ const FeedbackContainer = ({
   return (
     <FeedbackList
       complaints={complaints}
-      onSelectComplaint={setCurrent}
+      onSelectComplaint={handleSelectComplaint}
     />
   );
 };
 
-export default FeedbackContainer;
+FeedbackContainer.propTypes = {
+  complaints: PropTypes.array.isRequired,
+  selectedComplaint: PropTypes.object,
+  clearSelection: PropTypes.func.isRequired,
+};
+
+export default React.memo(FeedbackContainer);
+

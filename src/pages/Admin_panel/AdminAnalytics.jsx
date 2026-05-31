@@ -1,259 +1,222 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { Grid, Typography, CircularProgress, Box } from "@mui/material";
+import { Typography, CircularProgress, Box, Button } from "@mui/material";
 import axios from "axios";
+import * as XLSX from "xlsx";
 import {
-  PieChart, Pie, Cell, Legend, Tooltip as RechartsTooltip,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
-  AreaChart, Area
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  Tooltip as RechartsTooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
 } from "recharts";
 import {
-  TrendingUp,
   PieChart as PieIcon,
   BarChart3,
   MapPin,
-  LocateFixed
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 
-// Fix leaflet icon issue
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
-let DefaultIcon = L.icon({
+/* Leaflet icon fix */
+L.Marker.prototype.options.icon = L.icon({
   iconUrl: markerIcon,
   shadowUrl: markerShadow,
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
-L.Marker.prototype.options.icon = DefaultIcon;
 
-const COLORS = ["#2b50ff", "#10b981", "#f97316", "#ef4444", "#8b5cf6", "#ec4899"];
+const COLORS = ["#2b50ff", "#10b981", "#f97316", "#ef4444", "#8b5cf6"];
 
 const AdminAnalytics = () => {
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const token = localStorage.getItem("token");
-  const axiosConfig = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const axiosConfig = useMemo(
+    () => ({ headers: { Authorization: `Bearer ${token}` } }),
+    [token]
+  );
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await axios.get("http://localhost:8081/api/admin/complaints", axiosConfig);
-        setComplaints(res.data || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    axios
+      .get("http://localhost:8081/api/admin/complaints", axiosConfig)
+      .then(res => setComplaints(res.data || []))
+      .finally(() => setLoading(false));
   }, [axiosConfig]);
 
+  /* ---------------- DATA ---------------- */
   const categoryData = useMemo(() => {
-    const counts = complaints.reduce((acc, c) => {
-      const cat = c.category || "General";
-      acc[cat] = (acc[cat] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    const map = {};
+    complaints.forEach(c => {
+      map[c.category || "General"] =
+        (map[c.category || "General"] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [complaints]);
 
   const statusData = useMemo(() => {
-    const counts = complaints.reduce((acc, c) => {
-      const status = c.status || "UNKNOWN";
-      acc[status] = (acc[status] || 0) + 1;
-      return acc;
-    }, {});
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+    const map = {};
+    complaints.forEach(c => {
+      map[c.status || "UNKNOWN"] =
+        (map[c.status || "UNKNOWN"] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [complaints]);
 
-  const trendData = useMemo(() => {
-    const last7Days = [...Array(7)].map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toISOString().split("T")[0];
-    }).reverse();
+  const priorityData = useMemo(() => {
+    const map = {};
+    complaints.forEach(c => {
+      map[c.priority || "NORMAL"] =
+        (map[c.priority || "NORMAL"] || 0) + 1;
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
+  }, [complaints]);
 
-    const counts = complaints.reduce((acc, c) => {
-      const date = c.createdAt ? c.createdAt.split("T")[0] : null;
-      if (date && last7Days.includes(date)) {
-        acc[date] = (acc[date] || 0) + 1;
+  const officerWorkloadData = useMemo(() => {
+    const map = {};
+    complaints.forEach(c => {
+      if (c.assignedOfficer?.name) {
+        map[c.assignedOfficer.name] =
+          (map[c.assignedOfficer.name] || 0) + 1;
       }
-      return acc;
-    }, {});
-
-    return last7Days.map(date => ({
-      name: new Date(date).toLocaleDateString(undefined, { weekday: 'short' }),
-      count: counts[date] || 0
-    }));
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [complaints]);
 
-  const mapComplaints = useMemo(() => {
-    return complaints.filter(c => c.latitude && c.longitude);
-  }, [complaints]);
-
-  if (loading) return (
-    <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
-      <CircularProgress thickness={5} size={50} />
-    </Box>
+  const mapComplaints = useMemo(
+    () => complaints.filter(c => c.latitude && c.longitude),
+    [complaints]
   );
 
+  /* ---------------- EXPORT ---------------- */
+  const exportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(complaints);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Complaints");
+    XLSX.writeFile(wb, "complaints.xlsx");
+  };
+
+  if (loading)
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
+        <CircularProgress />
+      </Box>
+    );
+
   return (
-    <Box sx={{ p: { xs: 2, md: 4 } }}>
-      <Typography variant="h4" fontWeight="800" gutterBottom sx={{ mb: 4, color: "var(--text-primary)" }}>
-        Strategic Analytics
-      </Typography>
+    <Box sx={{ p: 4 }}>
+      {/* HEADER */}
+      <Box display="flex" justifyContent="space-between" mb={4}>
+        <Typography variant="h4" fontWeight="800">
+          Strategic Analytics
+        </Typography>
+        <Button variant="contained" onClick={exportExcel}>
+          Export Excel
+        </Button>
+      </Box>
 
-      <Grid container spacing={4}>
-        {/* Row 1: Trend Chart & Category Breakdown */}
-        <Grid item xs={12} lg={6}>
-          <Box sx={{
-            background: "var(--surface)",
-            p: 4,
-            borderRadius: "32px",
-            border: "1px solid var(--border-soft)",
-            boxShadow: "var(--card-shadow)",
-            height: "480px",
-            display: "flex",
-            flexDirection: "column"
-          }}>
-            <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-              <TrendingUp color="var(--primary)" size={24} />
-              <Typography variant="h6" fontWeight="700">7-Day Submission Trend</Typography>
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData}>
-                  <defs>
-                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.1} />
-                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} />
-                  <RechartsTooltip contentStyle={{ borderRadius: "12px", border: "none", boxShadow: "0 10px 30px rgba(0,0,0,0.1)" }} />
-                  <Area type="monotone" dataKey="count" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorCount)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
-          </Box>
-        </Grid>
+      {/* GRID */}
+      <Box display="grid" gridTemplateColumns="repeat(24, 1fr)" gap={4}>
 
-        <Grid item xs={12} lg={6}>
-          <Box sx={{
-            background: "var(--surface)",
-            p: 4,
-            borderRadius: "32px",
-            border: "1px solid var(--border-soft)",
-            boxShadow: "var(--card-shadow)",
-            height: "480px",
-            display: "flex",
-            flexDirection: "column"
-          }}>
-            <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-              <PieIcon color="#f97316" size={24} />
-              <Typography variant="h6" fontWeight="700">Category Distribution</Typography>
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    innerRadius={60}
-                    outerRadius={100}
-                    dataKey="value"
-                    paddingAngle={5}
-                  >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip />
-                  <Legend iconType="circle" />
-                </PieChart>
-              </ResponsiveContainer>
-            </Box>
-          </Box>
-        </Grid>
+        {/* FIRST POSITION → MAP */}
+        <Card span={24} title="Complaint Hotspots" icon={<MapPin color="#2b50ff" />}>
+          <MapContainer center={[20, 78]} zoom={5} style={{ height: "100%" }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            {mapComplaints.map((c, i) => (
+              <Marker key={i} position={[c.latitude, c.longitude]}>
+                <Popup>
+                  <strong>{c.category}</strong><br />
+                  Status: {c.status}<br />
+                  Priority: {c.priority}
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+        </Card>
 
-        {/* Row 2: Status Overview & Heatmap */}
-        <Grid item xs={12} lg={6}>
-          <Box sx={{
-            background: "var(--surface)",
-            p: 4,
-            borderRadius: "32px",
-            border: "1px solid var(--border-soft)",
-            boxShadow: "var(--card-shadow)",
-            height: "480px",
-            display: "flex",
-            flexDirection: "column"
-          }}>
-            <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-              <BarChart3 color="#10b981" size={24} />
-              <Typography variant="h6" fontWeight="700">Status Overview</Typography>
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(0,0,0,0.05)" />
-                  <XAxis type="number" hide />
-                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} />
-                  <RechartsTooltip cursor={{ fill: "rgba(0,0,0,0.02)" }} />
-                  <Bar dataKey="value" radius={[0, 10, 10, 0]} barSize={20}>
-                    {statusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </Box>
-          </Box>
-        </Grid>
+        {/* STATUS */}
+        <Card span={12} title="Status Distribution" icon={<BarChart3 color="#10b981" />}>
+          <BarChartBlock data={statusData} color="#10b981" />
+        </Card>
 
-        <Grid item xs={12} lg={6}>
-          <Box sx={{
-            background: "var(--surface)",
-            p: 3,
-            borderRadius: "32px",
-            border: "1px solid var(--border-soft)",
-            boxShadow: "var(--card-shadow)",
-            height: "480px",
-            display: "flex",
-            flexDirection: "column"
-          }}>
-            <Box display="flex" alignItems="center" gap={1.5} mb={2}>
-              <LocateFixed color="var(--accent)" size={24} />
-              <Typography variant="h6" fontWeight="700">Complaint Hotspots</Typography>
-            </Box>
-            <Box sx={{ flex: 1, borderRadius: "20px", overflow: "hidden", border: "1px solid var(--border-soft)" }}>
-              <MapContainer
-                center={[20.5937, 78.9629]}
-                zoom={5}
-                style={{ height: "100%", width: "100%" }}
-              >
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                {mapComplaints.map((c) => (
-                  <Marker key={c.id} position={[c.latitude, c.longitude]}>
-                    <Popup>
-                      <div style={{ padding: "5px" }}>
-                        <Typography variant="subtitle2" fontWeight="700">{c.title}</Typography>
-                        <Typography variant="caption" color="text.secondary">{c.category} • {c.status}</Typography>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-              </MapContainer>
-            </Box>
-          </Box>
-        </Grid>
-      </Grid>
+        {/* PRIORITY */}
+        <Card span={12} title="Priority Distribution" icon={<PieIcon color="#ef4444" />}>
+          <PieChartBlock data={priorityData} />
+        </Card>
+
+        {/* LAST TWO – SAME WIDTH & HEIGHT */}
+        <Card span={12} title="Category Distribution" icon={<PieIcon color="#f97316" />}>
+          <PieChartBlock data={categoryData} />
+        </Card>
+
+        <Card span={12} title="Officer Workload" icon={<BarChart3 color="#8b5cf6" />}>
+          <BarChartBlock
+            data={officerWorkloadData.slice(0, 5)}
+            color="#8b5cf6"
+          />
+        </Card>
+
+      </Box>
     </Box>
   );
 };
+
+/* ---------- REUSABLE COMPONENTS ---------- */
+const Card = ({ span, title, icon, children }) => (
+  <Box
+    sx={{
+      gridColumn: `span ${span}`,
+      background: "var(--surface)",
+      p: 3,
+      borderRadius: "24px",
+      boxShadow: "var(--card-shadow)",
+      height: 480,
+      display: "flex",
+      flexDirection: "column",
+    }}
+  >
+    <Box display="flex" gap={1.5} mb={2}>
+      {icon}
+      <Typography fontWeight="700">{title}</Typography>
+    </Box>
+    <Box sx={{ flex: 1 }}>{children}</Box>
+  </Box>
+);
+
+const PieChartBlock = ({ data }) => (
+  <ResponsiveContainer width="100%" height="100%">
+    <PieChart>
+      <Pie data={data} dataKey="value" innerRadius={60} outerRadius={100}>
+        {data.map((_, i) => (
+          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+        ))}
+      </Pie>
+      <Legend />
+      <RechartsTooltip />
+    </PieChart>
+  </ResponsiveContainer>
+);
+
+const BarChartBlock = ({ data, color }) => (
+  <ResponsiveContainer width="100%" height="100%">
+    <BarChart data={data}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="name" />
+      <YAxis />
+      <RechartsTooltip />
+      <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} />
+    </BarChart>
+  </ResponsiveContainer>
+);
 
 export default AdminAnalytics;

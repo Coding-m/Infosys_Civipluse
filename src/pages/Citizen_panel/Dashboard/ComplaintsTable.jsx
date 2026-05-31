@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import PropTypes from "prop-types";
-import { Trash2, Eye, MessageSquare, Search } from "lucide-react";
+import { Trash2, Eye, MessageSquare, Search, AlertCircle } from "lucide-react";
 
-const BACKEND_URL = "http://localhost:8081";
+const BACKEND_URL = import.meta.env.VITE_API_URL;
 
 const ComplaintsTable = ({
   complaints,
   loading,
+  error,
   fetchComplaints,
   onFeedback,
 }) => {
@@ -23,7 +24,7 @@ const ComplaintsTable = ({
     if (!globalThis.confirm("Delete this complaint?")) return;
 
     try {
-      await fetch(`${BACKEND_URL}/api/citizen/complaints/delete/${id}`, {
+      await fetch(`${BACKEND_URL}/api/citizen/complaints/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: "Bearer " + localStorage.getItem("token"),
@@ -92,10 +93,7 @@ const ComplaintsTable = ({
               return (
                 <tr
                   key={c.id}
-                  style={{
-                    borderBottom: "1px solid var(--border-soft)",
-                    transition: "background 0.2s ease",
-                  }}
+                  style={{ borderBottom: "1px solid var(--border-soft)", transition: "background 0.2s ease" }}
                   onMouseEnter={(e) => e.currentTarget.style.background = "color-mix(in srgb, var(--primary) 5%, transparent)"}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                 >
@@ -120,13 +118,7 @@ const ComplaintsTable = ({
                       <img
                         src={`${BACKEND_URL}${c.imageUrl}`}
                         alt="complaint"
-                        style={{
-                          width: 50,
-                          height: 50,
-                          objectFit: "cover",
-                          borderRadius: 12,
-                          border: "1px solid var(--border)",
-                        }}
+                        style={{ width: 50, height: 50, objectFit: "cover", borderRadius: 12, border: "1px solid var(--border)" }}
                       />
                     ) : (
                       <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>-</span>
@@ -151,14 +143,8 @@ const ComplaintsTable = ({
                           gap: "0.4rem",
                           transition: "all 0.2s ease",
                         }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--primary)";
-                          e.currentTarget.style.color = "white";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "transparent";
-                          e.currentTarget.style.color = "var(--primary)";
-                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "var(--primary)"; e.currentTarget.style.color = "white"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--primary)"; }}
                       >
                         <Eye size={16} />
                         View
@@ -166,6 +152,7 @@ const ComplaintsTable = ({
 
                       <button
                         type="button"
+                        disabled={c.status === "RESOLVED"}
                         onClick={() => handleDelete(c.id)}
                         style={{
                           padding: "0.5rem 1rem",
@@ -173,21 +160,15 @@ const ComplaintsTable = ({
                           border: "1px solid var(--accent)",
                           borderRadius: "10px",
                           color: "var(--accent)",
-                          cursor: "pointer",
+                          cursor: c.status === "RESOLVED" ? "not-allowed" : "pointer",
                           fontSize: "0.85rem",
                           fontWeight: "600",
                           display: "flex",
                           alignItems: "center",
                           gap: "0.4rem",
+                          opacity: c.status === "RESOLVED" ? 0.4 : 1,
+                          pointerEvents: c.status === "RESOLVED" ? "none" : "auto",
                           transition: "all 0.2s ease",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--accent)";
-                          e.currentTarget.style.color = "white";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "transparent";
-                          e.currentTarget.style.color = "var(--accent)";
                         }}
                       >
                         <Trash2 size={16} />
@@ -197,32 +178,26 @@ const ComplaintsTable = ({
                       {c.status === "RESOLVED" && (
                         <button
                           type="button"
+                          disabled={!!c.feedback}
                           onClick={() => onFeedback(c)}
                           style={{
                             padding: "0.5rem 1rem",
-                            background: "linear-gradient(135deg, var(--primary), var(--primary-strong))",
+                            background: c.feedback ? "#e5e7eb" : "linear-gradient(135deg, var(--primary), var(--primary-strong))",
                             border: "none",
                             borderRadius: "10px",
-                            color: "white",
-                            cursor: "pointer",
+                            color: c.feedback ? "#6b7280" : "white",
+                            cursor: c.feedback ? "not-allowed" : "pointer",
                             fontSize: "0.85rem",
                             fontWeight: "600",
                             display: "flex",
                             alignItems: "center",
                             gap: "0.4rem",
-                            transition: "all 0.2s ease",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = "translateY(-2px)";
-                            e.currentTarget.style.boxShadow = "0 10px 20px rgba(43, 80, 255, 0.3)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "translateY(0)";
-                            e.currentTarget.style.boxShadow = "none";
+                            opacity: c.feedback ? 0.6 : 1,
+                            pointerEvents: c.feedback ? "none" : "auto",
                           }}
                         >
                           <MessageSquare size={16} />
-                          Feedback
+                          {c.feedback ? "Feedback Submitted" : "Feedback"}
                         </button>
                       )}
                     </div>
@@ -238,6 +213,41 @@ const ComplaintsTable = ({
 
   return (
     <>
+      {/* ===== Error Banner ===== */}
+      {error && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: "1rem 1.25rem",
+          marginBottom: "1.5rem",
+          background: "rgba(239, 68, 68, 0.08)",
+          border: "1px solid rgba(239, 68, 68, 0.25)",
+          borderRadius: "14px",
+          color: "#dc2626",
+        }}>
+          <AlertCircle size={18} style={{ flexShrink: 0 }} aria-hidden="true" />
+          <span style={{ fontSize: "0.95rem", fontWeight: "500", flex: 1 }}>{error}</span>
+          <button
+            type="button"
+            onClick={fetchComplaints}
+            style={{
+              padding: "0.35rem 0.85rem",
+              background: "transparent",
+              border: "1px solid #dc2626",
+              borderRadius: "8px",
+              color: "#dc2626",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              fontWeight: "600",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* ===== Stats Cards ===== */}
       <section aria-label="Complaints Statistics" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
         <article
@@ -250,14 +260,9 @@ const ComplaintsTable = ({
             boxShadow: "var(--card-shadow)",
             transition: "transform 0.2s ease, box-shadow 0.2s ease",
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-4px)";
-            e.currentTarget.style.boxShadow = "0 40px 80px rgba(43, 80, 255, 0.15)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "var(--card-shadow)";
-          }}>
+          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 40px 80px rgba(43, 80, 255, 0.15)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "var(--card-shadow)"; }}
+        >
           <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
             Total Complaints
           </h3>
@@ -289,83 +294,31 @@ const ComplaintsTable = ({
             placeholder="Search by title or category..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{
-              flex: 1,
-              border: "none",
-              background: "transparent",
-              color: "var(--text-primary)",
-              fontSize: "1rem",
-              outline: "none",
-              fontFamily: "inherit",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.parentElement.style.borderColor = "var(--primary)";
-              e.currentTarget.parentElement.style.boxShadow = "0 0 0 4px rgba(43, 80, 255, 0.1)";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.parentElement.style.borderColor = "var(--border)";
-              e.currentTarget.parentElement.style.boxShadow = "none";
-            }}
+            style={{ flex: 1, border: "none", background: "transparent", color: "var(--text-primary)", fontSize: "1rem", outline: "none", fontFamily: "inherit" }}
+            onFocus={(e) => { e.currentTarget.parentElement.style.borderColor = "var(--primary)"; e.currentTarget.parentElement.style.boxShadow = "0 0 0 4px rgba(43, 80, 255, 0.1)"; }}
+            onBlur={(e) => { e.currentTarget.parentElement.style.borderColor = "var(--border)"; e.currentTarget.parentElement.style.boxShadow = "none"; }}
           />
         </div>
       </div>
 
       {/* ===== Complaints List ===== */}
-      <div style={{
-        background: "var(--surface)",
-        borderRadius: "20px",
-        border: "1px solid var(--border-soft)",
-        overflow: "hidden",
-        boxShadow: "var(--card-shadow)",
-      }}>
+      <div style={{ background: "var(--surface)", borderRadius: "20px", border: "1px solid var(--border-soft)", overflow: "hidden", boxShadow: "var(--card-shadow)" }}>
         <div style={{ padding: "1.5rem", borderBottom: "1px solid var(--border-soft)" }}>
           <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "700", color: "var(--text-primary)" }}>
             Your Complaints
           </h3>
         </div>
-
         {renderComplaintsList()}
       </div>
 
       {/* ===== Modal ===== */}
       {modalOpen && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          background: "rgba(0, 0, 0, 0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          padding: "2rem",
-        }}>
-          <div
-            style={{
-              background: "var(--surface)",
-              borderRadius: "24px",
-              padding: "2rem",
-              maxWidth: 600,
-              width: "100%",
-              maxHeight: "85vh",
-              overflowY: "auto",
-              border: "1px solid var(--border-soft)",
-              boxShadow: "0 50px 100px rgba(0, 0, 0, 0.3)",
-              animation: "slideIn 0.3s ease",
-            }}
-          >
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0, 0, 0, 0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "2rem" }}>
+          <div style={{ background: "var(--surface)", borderRadius: "24px", padding: "2rem", maxWidth: 600, width: "100%", maxHeight: "85vh", overflowY: "auto", border: "1px solid var(--border-soft)", boxShadow: "0 50px 100px rgba(0, 0, 0, 0.3)", animation: "slideIn 0.3s ease" }}>
             <style>{`
               @keyframes slideIn {
-                from {
-                  transform: translate(-50%, -40%) scale(0.9);
-                  opacity: 0;
-                }
-                to {
-                  transform: translate(0, 0) scale(1);
-                  opacity: 1;
-                }
+                from { transform: translate(-50%, -40%) scale(0.9); opacity: 0; }
+                to   { transform: translate(0, 0) scale(1); opacity: 1; }
               }
             `}</style>
             {selectedComplaint && (
@@ -373,12 +326,10 @@ const ComplaintsTable = ({
                 <h2 style={{ margin: "0 0 1rem", fontSize: "1.5rem", fontWeight: "700", color: "var(--text-primary)" }}>
                   {selectedComplaint.title}
                 </h2>
-                
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1rem", marginBottom: "1.5rem" }}>
                   <div>
                     <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-muted)", marginBottom: "0.5rem" }}>Status</div>
                     <div style={{
-                      ...getStatusStyle(selectedComplaint.status),
                       display: "inline-block",
                       padding: "0.5rem 1rem",
                       borderRadius: "999px",
@@ -395,31 +346,21 @@ const ComplaintsTable = ({
                     <div style={{ fontSize: "1rem", color: "var(--text-primary)", fontWeight: "500" }}>{selectedComplaint.category}</div>
                   </div>
                 </div>
-
                 <div style={{ marginBottom: "1.5rem" }}>
                   <div style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-muted)", marginBottom: "0.5rem" }}>Description</div>
-                  <p style={{ margin: 0, color: "var(--text-primary)", lineHeight: "1.6" }}>
-                    {selectedComplaint.description}
-                  </p>
+                  <p style={{ margin: 0, color: "var(--text-primary)", lineHeight: "1.6" }}>{selectedComplaint.description}</p>
                 </div>
-
                 {selectedComplaint.imageUrl && (
                   <div style={{ marginBottom: "1.5rem" }}>
                     <img
                       src={`${BACKEND_URL}${selectedComplaint.imageUrl}`}
                       alt="complaint"
-                      style={{
-                        width: "100%",
-                        maxHeight: 300,
-                        objectFit: "cover",
-                        borderRadius: 16,
-                        border: "1px solid var(--border)",
-                      }}
+                      style={{ width: "100%", maxHeight: 300, objectFit: "cover", borderRadius: 16, border: "1px solid var(--border)" }}
                     />
                   </div>
                 )}
-
                 <button
+                  type="button"
                   onClick={() => setModalOpen(false)}
                   style={{
                     width: "100%",
@@ -433,14 +374,8 @@ const ComplaintsTable = ({
                     cursor: "pointer",
                     transition: "all 0.2s ease",
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow = "0 15px 35px rgba(43, 80, 255, 0.3)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 15px 35px rgba(43, 80, 255, 0.3)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
                 >
                   Close
                 </button>
@@ -453,12 +388,12 @@ const ComplaintsTable = ({
   );
 };
 
-export default ComplaintsTable;
-
 ComplaintsTable.propTypes = {
   complaints: PropTypes.array.isRequired,
   loading: PropTypes.bool.isRequired,
+  error: PropTypes.string,
   fetchComplaints: PropTypes.func.isRequired,
   onFeedback: PropTypes.func.isRequired,
 };
 
+export default ComplaintsTable;

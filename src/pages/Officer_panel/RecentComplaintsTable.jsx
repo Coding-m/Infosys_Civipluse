@@ -1,174 +1,168 @@
-import React, { useState } from "react";
-import { Maximize2, FileText, AlertCircle, Clock, CheckCircle2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import PropTypes from "prop-types";
+import { Maximize2, FileText, AlertCircle, Clock, CheckCircle2, X } from "lucide-react";
 import { statusColor, priorityColor } from "./helpers";
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+const resolveImageUrl = (url) => {
+  if (!url || url.trim() === "") return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return encodeURI(url);
+  return encodeURI(`${API_URL}${url}`);
+};
 
 const RecentComplaintsTable = ({ complaints }) => {
   const [previewImage, setPreviewImage] = useState(null);
+  const [hoveredImage, setHoveredImage] = useState(null);
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case "PENDING": return <Clock size={14} />;
-      case "IN_PROGRESS": return <Clock size={14} />;
-      case "RESOLVED": return <CheckCircle2 size={14} />;
-      case "ESCALATED": return <AlertCircle size={14} />;
-      default: return null;
-    }
-  };
+  useEffect(() => {
+    const handler = (e) => e.key === "Escape" && setPreviewImage(null);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
-    <div style={{
-      background: "var(--surface)",
-      padding: "2rem",
-      borderRadius: "24px",
-      border: "1px solid var(--border-soft)",
-      boxShadow: "var(--card-shadow)",
-      overflow: "hidden"
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "1.5rem" }}>
-        <div style={{ padding: "8px", borderRadius: "10px", background: "color-mix(in srgb, var(--primary) 10%, transparent)", color: "var(--primary)" }}>
+    <div style={{ background: "var(--surface)", padding: "2rem", borderRadius: "24px", border: "1px solid var(--border-soft)", boxShadow: "var(--card-shadow)" }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: "1.5rem" }}>
+        <div style={{ padding: 8, borderRadius: 10, background: "color-mix(in srgb, var(--primary) 10%, transparent)", color: "var(--primary)" }}>
           <FileText size={20} />
         </div>
-        <h2 style={{ fontSize: "1.25rem", fontWeight: "800", color: "var(--text-primary)", margin: 0 }}>
-          Recent Grievances
-        </h2>
+        <h2 style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0 }}>Recent Grievances</h2>
       </div>
 
+      {/* Table */}
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}>
           <thead>
             <tr>
-              {["ID", "Complaint Title", "Category", "Status", "Priority", "Evidence", "Target Date"].map((head) => (
-                <th key={head} style={{
-                  textAlign: "left",
-                  padding: "1rem",
-                  color: "var(--text-muted)",
-                  fontSize: "0.85rem",
-                  fontWeight: "700",
-                  textTransform: "uppercase"
-                }}>
+              {["ID", "Complaint Title", "Category", "Status", "Priority", "Citizen Evidence", "Officer Evidence", "Target Date"].map((head) => (
+                <th key={head} style={{ textAlign: "left", padding: "1rem", fontSize: "0.85rem", fontWeight: 700, color: "var(--text-muted)" }}>
                   {head}
                 </th>
               ))}
             </tr>
           </thead>
+
           <tbody>
             {complaints.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
+                <td colSpan={8} style={{ textAlign: "center", padding: "3rem" }}>
                   No complaints assigned to you yet.
                 </td>
               </tr>
             ) : (
-              complaints.map((c) => (
-                <tr key={c.id} style={{ transition: "all 0.2s ease" }}>
-                  <td style={{ padding: "1rem", color: "var(--text-muted)", fontWeight: "600", borderBottom: "1px solid var(--border-soft)" }}>#{c.id}</td>
-                  <td style={{ padding: "1rem", fontWeight: "700", color: "var(--text-primary)", borderBottom: "1px solid var(--border-soft)" }}>{c.title}</td>
-                  <td style={{ padding: "1rem", borderBottom: "1px solid var(--border-soft)" }}>
-                    <span style={{
-                      padding: "4px 10px",
-                      borderRadius: "8px",
-                      background: "rgba(0,0,0,0.03)",
-                      fontSize: "0.85rem",
-                      fontWeight: "600",
-                      color: "var(--text-muted)"
-                    }}>
-                      {c.category}
-                    </span>
-                  </td>
-                  <td style={{ padding: "1rem", borderBottom: "1px solid var(--border-soft)" }}>
-                    <div style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "6px 12px",
-                      borderRadius: "10px",
-                      fontSize: "0.85rem",
-                      fontWeight: "700",
-                      width: "fit-content",
-                      background: `color-mix(in srgb, ${c.status === "RESOLVED" ? "#10b981" : c.status === "ESCALATED" ? "#ef4444" : "#f59e0b"} 10%, transparent)`,
-                      color: c.status === "RESOLVED" ? "#10b981" : c.status === "ESCALATED" ? "#ef4444" : "#f59e0b"
-                    }}>
-                      {getStatusIcon(c.status)}
-                      {c.status}
-                    </div>
-                  </td>
-                  <td style={{ padding: "1rem", borderBottom: "1px solid var(--border-soft)" }}>
-                    <div style={{
-                      padding: "4px 10px",
-                      borderRadius: "8px",
-                      fontSize: "0.75rem",
-                      fontWeight: "800",
-                      width: "fit-content",
-                      background: c.priority === "HIGH" ? "rgba(239, 68, 68, 0.1)" : "rgba(0,0,0,0.03)",
-                      color: c.priority === "HIGH" ? "#ef4444" : "var(--text-muted)",
-                      border: c.priority === "HIGH" ? "1px solid rgba(239,68,68,0.2)" : "1px solid transparent"
-                    }}>
-                      {c.priority}
-                    </div>
-                  </td>
-                  <td style={{ padding: "1rem", borderBottom: "1px solid var(--border-soft)" }}>
-                    {c.imageUrl ? (
-                      <div
-                        style={{ position: "relative", width: "45px", height: "45px", cursor: "pointer" }}
-                        onClick={() => setPreviewImage(`http://localhost:8081${c.imageUrl}`)}
-                      >
-                        <img
-                          src={`http://localhost:8081${c.imageUrl}`}
-                          alt="Evidence"
-                          style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px" }}
-                        />
-                        <div style={{
-                          position: "absolute",
-                          inset: 0,
-                          background: "rgba(0,0,0,0.3)",
-                          borderRadius: "10px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          opacity: 0,
-                          transition: "opacity 0.2s ease"
-                        }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
-                          <Maximize2 size={16} color="#fff" />
-                        </div>
+              complaints.map((c) => {
+                const citizenImage = resolveImageUrl(c.imageUrl);
+                const officerImage = resolveImageUrl(c.officerEvidenceUrl);
+
+                return (
+                  <tr key={c.id}>
+                    <td style={{ padding: "1rem", fontWeight: 600 }}>#{c.id}</td>
+                    <td style={{ padding: "1rem", fontWeight: 700 }}>{c.title}</td>
+                    <td style={{ padding: "1rem" }}>{c.category}</td>
+
+                    <td style={{ padding: "1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 10, fontWeight: 700, background: `color-mix(in srgb, ${statusColor(c.status)} 10%, transparent)`, color: statusColor(c.status) }}>
+                        {c.status === "RESOLVED" ? <CheckCircle2 size={14} /> : c.status === "ESCALATED" ? <AlertCircle size={14} /> : <Clock size={14} />}
+                        {c.status}
                       </div>
-                    ) : (
-                      <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>No image</span>
-                    )}
-                  </td>
-                  <td style={{ padding: "1rem", borderBottom: "1px solid var(--border-soft)", color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                    {c.resolutionDate ? new Date(c.resolutionDate).toLocaleDateString() : "TBD"}
-                  </td>
-                </tr>
-              ))
+                    </td>
+
+                    <td style={{ padding: "1rem" }}>
+                      <div style={{ padding: "4px 10px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 800, background: priorityColor(c.priority).bg, color: priorityColor(c.priority).color, border: priorityColor(c.priority).border }}>
+                        {c.priority}
+                      </div>
+                    </td>
+
+                    <td style={{ padding: "1rem" }}>
+                      {citizenImage ? (
+                        <ImageThumb
+                          src={citizenImage}
+                          onClick={() => setPreviewImage(citizenImage)}
+                          hovered={hoveredImage === `citizen-${c.id}`}
+                          onEnter={() => setHoveredImage(`citizen-${c.id}`)}
+                          onLeave={() => setHoveredImage(null)}
+                        />
+                      ) : "No image"}
+                    </td>
+
+                    <td style={{ padding: "1rem" }}>
+                      {officerImage ? (
+                        <ImageThumb
+                          src={officerImage}
+                          onClick={() => setPreviewImage(officerImage)}
+                          hovered={hoveredImage === `officer-${c.id}`}
+                          onEnter={() => setHoveredImage(`officer-${c.id}`)}
+                          onLeave={() => setHoveredImage(null)}
+                        />
+                      ) : "No image"}
+                    </td>
+
+                    <td style={{ padding: "1rem" }}>
+                      {c.expectedCompletionDate
+                        ? new Date(c.expectedCompletionDate).toLocaleDateString()
+                        : "TBD"}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
+      {/* Preview modal */}
       {previewImage && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.8)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "2rem",
-            cursor: "zoom-out"
-          }}
           onClick={() => setPreviewImage(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999 }}
         >
-          <img
-            src={previewImage}
-            alt="Preview"
-            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: "16px", boxShadow: "0 25px 50px rgba(0,0,0,0.5)" }}
-          />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#111", borderRadius: 20, width: "80%", maxWidth: 900, animation: "zoomIn 0.25s ease", boxShadow: "0 30px 60px rgba(0,0,0,0.6)" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.1)", color: "#fff" }}>
+              <strong>Evidence Preview</strong>
+              <button type="button" aria-label="Close preview" onClick={() => setPreviewImage(null)} style={{ background: "none", border: "none", cursor: "pointer", opacity: 0.8, color: "#fff", display: "flex" }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: 16, textAlign: "center" }}>
+              <img src={previewImage} alt="Preview" style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 14 }} />
+            </div>
+          </div>
         </div>
       )}
+
+      <style>{`@keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
     </div>
   );
+};
+
+RecentComplaintsTable.propTypes = {
+  complaints: PropTypes.array.isRequired,
+};
+
+/* Thumbnail */
+const ImageThumb = ({ src, onClick, hovered, onEnter, onLeave }) => (
+  <div style={{ position: "relative", width: 45, height: 45, cursor: "pointer" }} onClick={onClick} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+    <img src={src} alt="Evidence" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10 }} />
+    {hovered && (
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10 }}>
+        <Maximize2 size={16} color="#fff" />
+      </div>
+    )}
+  </div>
+);
+
+ImageThumb.propTypes = {
+  src:     PropTypes.string.isRequired,
+  onClick: PropTypes.func.isRequired,
+  hovered: PropTypes.bool,
+  onEnter: PropTypes.func.isRequired,
+  onLeave: PropTypes.func.isRequired,
 };
 
 export default RecentComplaintsTable;

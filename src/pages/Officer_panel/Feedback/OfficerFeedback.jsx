@@ -1,349 +1,143 @@
 import React, { useEffect, useState } from "react";
-import { Star, MessageSquare, AlertCircle, Quote } from "lucide-react";
+import PropTypes from "prop-types";
+import { Star, MessageSquare, Quote } from "lucide-react";
 import api from "../../../api/axios";
 import { toast } from "react-toastify";
 
 const OfficerFeedback = () => {
-  const [feedbacks, setFeedbacks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [complaints, setComplaints]                   = useState([]);
+  const [loading, setLoading]                         = useState(true);
+  const [expandedComplaintId, setExpandedComplaintId] = useState(null);
+  const [feedbackMap, setFeedbackMap]                 = useState({});
 
   useEffect(() => {
-    api.get("/api/officer/feedback/my-complaints")
-      .then(res => setFeedbacks(res.data))
-      .catch(() => toast.error("Failed to load feedbacks"))
-      .finally(() => setLoading(false));
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+
+        const [complaintsRes, feedbacksRes] = await Promise.all([
+          api.get("/api/officer/complaints"),
+          api.get("/api/officer/feedbacks"),
+        ]);
+
+        setComplaints(complaintsRes.data);
+
+        const map = {};
+        feedbacksRes.data.forEach((f) => { map[f.complaintId] = f; });
+        setFeedbackMap(map);
+      } catch {
+        toast.error("Failed to load complaints or feedbacks");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
   }, []);
 
-  if (loading) {
-    return (
-      <div style={{
-        background: "var(--surface)",
-        borderRadius: "24px",
-        padding: "3rem",
-        textAlign: "center",
-        border: "1px solid var(--border-soft)",
-      }}>
-        <div style={{
-          display: "inline-block",
-          width: "40px",
-          height: "40px",
-          borderRadius: "50%",
-          border: "3px solid var(--primary)",
-          borderTopColor: "transparent",
-          animation: "spin 1s linear infinite",
-        }} />
-        <p style={{ marginTop: "1rem", color: "var(--text-muted)" }}>Loading feedbacks...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
+  const handleToggleFeedback = (complaintId) => {
+    setExpandedComplaintId(
+      expandedComplaintId === complaintId ? null : complaintId
     );
-  }
+  };
 
-  if (!feedbacks || feedbacks.length === 0) {
-    return (
-      <div style={{
-        background: "var(--surface)",
-        borderRadius: "24px",
-        padding: "4rem 2rem",
-        border: "1px solid var(--border-soft)",
-        boxShadow: "var(--card-shadow)",
-        textAlign: "center",
-      }}>
-        <div style={{
-          display: "flex",
-          justifyContent: "center",
-          marginBottom: "1.5rem",
-        }}>
-          <MessageSquare size={48} color="var(--text-muted)" strokeWidth={1.5} />
-        </div>
-        <h2 style={{
-          margin: "0 0 0.5rem",
-          fontSize: "1.25rem",
-          fontWeight: "600",
-          color: "var(--text-primary)",
-        }}>
-          No Feedback Yet
-        </h2>
-        <p style={{
-          margin: 0,
-          color: "var(--text-muted)",
-          fontSize: "0.95rem",
-        }}>
-          Citizens haven't shared feedback on your resolved complaints yet
-        </p>
-      </div>
-    );
-  }
+  if (loading) return <p style={{ padding: "2rem" }}>Loading...</p>;
+
+  if (!complaints.length) return (
+    <div style={{ textAlign: "center", padding: "3rem" }}>
+      <MessageSquare size={48} />
+      <p>No complaints found</p>
+    </div>
+  );
 
   return (
-    <div style={{
-      background: "var(--surface)",
-      borderRadius: "24px",
-      padding: "2.5rem",
-      border: "1px solid var(--border-soft)",
-      boxShadow: "var(--card-shadow)",
-    }}>
-      <div style={{ marginBottom: "2.5rem" }}>
-        <h1 style={{
-          margin: "0 0 0.75rem",
-          fontSize: "2rem",
-          fontWeight: "800",
-          color: "var(--text-primary)",
-          letterSpacing: "-0.5px"
-        }}>
-          Citizen Feedback
-        </h1>
-        <p style={{
-          margin: 0,
-          color: "var(--text-muted)",
-          fontSize: "1rem",
-          fontWeight: "500",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px"
-        }}>
-          <Quote size={18} color="var(--primary)" />
-          Read how citizens perceive your grievance resolution efforts.
-        </p>
-      </div>
+    <div style={{ padding: "2.5rem" }}>
+      <h1 style={{ fontSize: "2rem", fontWeight: 800 }}>Hear from the Citizens...</h1>
+      <p style={{ color: "var(--text-muted)", display: "flex", gap: 8 }}>
+        <Quote size={18} /> Feedback per resolved complaint
+      </p>
 
-      <div style={{
-        height: "1px",
-        background: "var(--border-soft)",
-        marginBottom: "2rem",
-      }}></div>
+      <div style={{ display: "grid", gap: "1.75rem", marginTop: "2rem" }}>
+        {complaints.map((c) => {
+          const feedback = feedbackMap[c.id];
+          const isOpen   = expandedComplaintId === c.id;
 
-      <div style={{ display: "grid", gap: "1.5rem" }}>
-        {feedbacks.map((f, i) => (
-          <div
-            key={i}
-            style={{
-              background: "color-mix(in srgb, var(--primary) 2%, transparent)",
-              border: "1px solid var(--border)",
-              borderRadius: "16px",
-              padding: "1.5rem",
-              transition: "all 0.2s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--primary)";
-              e.currentTarget.style.background = "color-mix(in srgb, var(--primary) 4%, transparent)";
-              e.currentTarget.style.transform = "translateY(-2px)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)";
-              e.currentTarget.style.background = "color-mix(in srgb, var(--primary) 2%, transparent)";
-              e.currentTarget.style.transform = "translateY(0)";
-            }}
-          >
-            {/* Header */}
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: "1.5rem",
-              paddingBottom: "1.25rem",
-              borderBottom: "1px solid var(--border-soft)",
-            }}>
-              <div>
-                <h3 style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "1.05rem",
-                  fontWeight: "600",
-                  color: "var(--text-primary)",
-                }}>
-                  Complaint #{f.complaintId}
-                </h3>
-                <p style={{
-                  margin: 0,
-                  color: "var(--text-muted)",
-                  fontSize: "0.9rem",
-                }}>
-                  {f.complaintTitle}
-                </p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.8rem",
-                  fontWeight: "600",
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}>
-                  From
-                </p>
-                <p style={{
-                  margin: 0,
-                  fontSize: "0.95rem",
-                  fontWeight: "600",
-                  color: "var(--text-primary)",
-                }}>
-                  {f.citizenName}
-                </p>
-                <p style={{
-                  margin: "0.25rem 0 0",
-                  fontSize: "0.8rem",
-                  color: "var(--text-muted)",
-                }}>
-                  📍 {f.citizenLocation}
-                </p>
-              </div>
-            </div>
+          return (
+            <div key={c.id} style={{ background: "var(--surface)", border: "1px solid var(--border-soft)", borderRadius: "18px", padding: "1.75rem", boxShadow: "var(--card-shadow)" }}>
 
-            {/* Ratings Grid */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "1rem",
-              marginBottom: "1.5rem",
-            }}>
-              {/* Overall Rating */}
-              <div style={{
-                background: "color-mix(in srgb, var(--accent) 8%, transparent)",
-                borderRadius: "12px",
-                padding: "1rem",
-                border: "1px solid var(--accent-light)",
-                textAlign: "center",
-              }}>
-                <p style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.75rem",
-                  fontWeight: "600",
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}>
-                  Overall Rating
-                </p>
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.25rem",
-                  marginBottom: "0.5rem",
-                }}>
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      size={18}
-                      fill={i < f.rating ? "var(--accent)" : "transparent"}
-                      color={i < f.rating ? "var(--accent)" : "var(--border)"}
-                    />
-                  ))}
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.2rem" }}>Complaint #{c.id}</h3>
+                  <p style={{ marginTop: 4, color: "var(--text-muted)" }}>🛠 {c.title}</p>
                 </div>
-                <p style={{
-                  margin: 0,
-                  fontSize: "1rem",
-                  fontWeight: "700",
-                  color: "var(--accent)",
-                }}>
-                  {f.rating}/5
-                </p>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleFeedback(c.id)}
+                  style={{ background: isOpen ? "#eee" : "var(--primary)", color: isOpen ? "#333" : "#fff", border: "none", borderRadius: "10px", padding: "0.55rem 1.2rem", cursor: "pointer", fontWeight: 600 }}
+                >
+                  {isOpen ? "Hide Feedback" : feedback ? "View Feedback" : "No Feedback"}
+                </button>
               </div>
 
-              {/* Behaviour Rating */}
-              <div style={{
-                background: "color-mix(in srgb, var(--primary) 8%, transparent)",
-                borderRadius: "12px",
-                padding: "1rem",
-                border: "1px solid color-mix(in srgb, var(--primary) 30%, transparent)",
-                textAlign: "center",
-              }}>
-                <p style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.75rem",
-                  fontWeight: "600",
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}>
-                  Behaviour Rating
-                </p>
-                <div style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.25rem",
-                  marginBottom: "0.5rem",
-                }}>
-                  {[...Array(5)].map((_, i) => (
-                    <Star
-                      key={i}
-                      size={18}
-                      fill={i < f.officerBehaviourRating ? "var(--primary)" : "transparent"}
-                      color={i < f.officerBehaviourRating ? "var(--primary)" : "var(--border)"}
-                    />
-                  ))}
+              {isOpen && feedback && (
+                <div style={{ marginTop: "1.5rem", padding: "1.5rem", borderRadius: "14px", background: "color-mix(in srgb, var(--primary) 4%, transparent)", border: "1px solid var(--border-soft)" }}>
+
+                  <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+                    {[
+                      { label: "Overall",   value: feedback.rating },
+                      { label: "Behaviour", value: feedback.officerBehaviourRating },
+                    ].map((r) => (
+                      <div key={r.label}>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{r.label.toUpperCase()}</p>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {[...Array(5)].map((_, i) => (
+                            <Star key={i} size={18} fill={i < r.value ? "var(--primary)" : "transparent"} color={i < r.value ? "var(--primary)" : "#ccc"} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ display: "flex", gap: "12px", marginTop: "1rem" }}>
+                    <Badge text={feedback.timeliness.replace("_", " ")} />
+                    <Badge text={feedback.resolutionStatus} success />
+                    <Badge text={feedback.reopened ? "Reopened" : "Not Reopened"} />
+                  </div>
+
+                  {feedback.feedbackComment && (
+                    <div style={{ marginTop: "1.25rem", padding: "1rem", borderLeft: "4px solid var(--primary)", background: "#fff", borderRadius: "8px" }}>
+                      <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>CITIZEN COMMENT</p>
+                      <p style={{ fontSize: "0.95rem" }}>"{feedback.feedbackComment}"</p>
+                    </div>
+                  )}
+
+                  {feedback.feedbackImageUrl && (
+                    <img src={feedback.feedbackImageUrl} alt="Feedback" style={{ width: "100%", maxHeight: "200px", objectFit: "cover", marginTop: "1rem", borderRadius: "12px" }} />
+                  )}
+
+                  <p style={{ marginTop: "1rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Submitted on {new Date(feedback.feedbackSubmittedAt).toLocaleString()}
+                  </p>
                 </div>
-                <p style={{
-                  margin: 0,
-                  fontSize: "1rem",
-                  fontWeight: "700",
-                  color: "var(--primary)",
-                }}>
-                  {f.officerBehaviourRating}/5
-                </p>
-              </div>
-
-              {/* Timeliness */}
-              <div style={{
-                background: "color-mix(in srgb, var(--text-muted) 8%, transparent)",
-                borderRadius: "12px",
-                padding: "1rem",
-                border: "1px solid color-mix(in srgb, var(--text-muted) 30%, transparent)",
-                textAlign: "center",
-              }}>
-                <p style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.75rem",
-                  fontWeight: "600",
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}>
-                  Timeliness
-                </p>
-                <p style={{
-                  margin: 0,
-                  fontSize: "1rem",
-                  fontWeight: "600",
-                  color: "var(--text-primary)",
-                  padding: "0.5rem 0",
-                }}>
-                  {f.timeliness === "ON_TIME" && "⏱ On Time"}
-                  {f.timeliness === "SLIGHT_DELAY" && "⏳ Slight Delay"}
-                  {f.timeliness === "VERY_LATE" && "🐢 Very Late"}
-                </p>
-              </div>
+              )}
             </div>
-
-            {/* Comment Section */}
-            {f.feedbackComment && (
-              <div style={{
-                background: "color-mix(in srgb, var(--text-primary) 3%, transparent)",
-                borderRadius: "12px",
-                padding: "1rem",
-                borderLeft: "3px solid var(--primary)",
-              }}>
-                <p style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.75rem",
-                  fontWeight: "600",
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}>
-                  Additional Comments
-                </p>
-                <p style={{
-                  margin: 0,
-                  fontSize: "0.95rem",
-                  color: "var(--text-primary)",
-                  lineHeight: 1.6,
-                }}>
-                  "{f.feedbackComment}"
-                </p>
-              </div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
+};
+
+const Badge = ({ text, success }) => (
+  <span style={{ padding: "0.35rem 0.75rem", borderRadius: "999px", fontSize: "0.75rem", fontWeight: 600, background: success ? "color-mix(in srgb, green 15%, transparent)" : "color-mix(in srgb, var(--text-muted) 12%, transparent)" }}>
+    {text}
+  </span>
+);
+
+Badge.propTypes = {
+  text:    PropTypes.string.isRequired,
+  success: PropTypes.bool,
 };
 
 export default OfficerFeedback;

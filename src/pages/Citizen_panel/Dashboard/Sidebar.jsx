@@ -1,32 +1,27 @@
 import React from "react";
-import { 
-  LayoutGrid, 
-  BookOpen, 
-  TrendingUp, 
-  Bell, 
-  MessageSquare, 
-  User, 
-  LogOut 
+import PropTypes from "prop-types";
+import {
+  LayoutGrid,
+  BookOpen,
+  TrendingUp,
+  Bell,
+  MessageSquare,
+  User,
+  LogOut,
 } from "lucide-react";
 import logoImg from "../../../assets/Logo.jpg";
 
-const Sidebar = ({ selected, setSelected, notifications, navigate }) => {
-  const propTypes = {
-    selected: "string",
-    setSelected: "function",
-    notifications: "array",
-    navigate: "function",
-  };
-  const sidebarItems = [
-    { label: "Dashboard", icon: LayoutGrid },
-    { label: "Submit Grievance", icon: BookOpen },
-    { label: "Track Complaints", icon: TrendingUp },
-    { label: "Notifications", icon: Bell, badge: notifications?.length || 0 },
-    { label: "Feedback", icon: MessageSquare },
-    { label: "My Profile", icon: User },
-    { label: "Logout", icon: LogOut, isLogout: true },
-  ];
+const sidebarItems = [
+  { label: "Dashboard",        icon: LayoutGrid },
+  { label: "Submit Grievance", icon: BookOpen },
+  { label: "Track Complaints", icon: TrendingUp },
+  { label: "Notifications",    icon: Bell },
+  { label: "Feedback",         icon: MessageSquare },
+  { label: "My Profile",       icon: User },
+  { label: "Logout",           icon: LogOut, isLogout: true },
+];
 
+const Sidebar = ({ selected, setSelected, notifications, navigate }) => {
   const handleNavigation = (item) => {
     if (item.isLogout) {
       localStorage.removeItem("token");
@@ -44,30 +39,40 @@ const Sidebar = ({ selected, setSelected, notifications, navigate }) => {
       </div>
 
       <nav className="dashboard-nav">
-        {sidebarItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = selected === item.label;
-          
-          return (
-            <li key={item.label} className="dashboard-nav-item">
-              <button
-                className={`dashboard-nav-button ${isActive ? "active" : ""}`}
-                onClick={() => handleNavigation(item)}
-                style={item.isLogout ? { color: "var(--accent)" } : {}}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-                {item.badge > 0 && (
-                  <span className="dashboard-nav-badge">{item.badge}</span>
-                )}
-              </button>
-            </li>
-          );
-        })}
+        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {sidebarItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = selected === item.label;
+            const badge = item.label === "Notifications" ? (notifications?.length || 0) : 0;
+
+            return (
+              <li key={item.label} className="dashboard-nav-item">
+                <button
+                  type="button"
+                  className={`dashboard-nav-button ${isActive ? "active" : ""}`}
+                  onClick={() => handleNavigation(item)}
+                  style={item.isLogout ? { color: "var(--accent)" } : {}}
+                >
+                  <Icon size={20} />
+                  <span>{item.label}</span>
+                  {badge > 0 && (
+                    <span className="dashboard-nav-badge">{badge}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
     </aside>
   );
 };
 
-export default Sidebar;
+Sidebar.propTypes = {
+  selected:      PropTypes.string.isRequired,
+  setSelected:   PropTypes.func.isRequired,
+  notifications: PropTypes.array,
+  navigate:      PropTypes.func.isRequired,
+};
 
+export default Sidebar;

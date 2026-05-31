@@ -11,6 +11,9 @@ import TrackComplaints from "./TrackComplaints";
 import FeedbackContainer from "../Feedback/FeedbackContainer";
 import Profile from "./Profile";
 
+const API_URL = import.meta.env.VITE_API_URL;
+const WS_URL = import.meta.env.VITE_WS_URL;
+
 const UserDashboard = () => {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useThemePreference();
@@ -19,124 +22,181 @@ const UserDashboard = () => {
   const [complaints, setComplaints] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [complaintLoading, setComplaintLoading] = useState(false);
+  const [complaintError, setComplaintError] = useState(null);
   const [feedbackComplaint, setFeedbackComplaint] = useState(null);
 
   const token = localStorage.getItem("token");
 
-  // ================= AUTH CHECK =================
+  // ── Auth Guard ─────────────────────────────────────────────
   useEffect(() => {
     if (!token) {
       navigate("/");
     }
   }, [navigate, token]);
 
-  // ================= FETCH COMPLAINTS =================
+  // ── Fetch Complaints ───────────────────────────────────────
   const fetchComplaints = useCallback(async () => {
     try {
       setComplaintLoading(true);
+      setComplaintError(null);
 
-      const res = await fetch("http://localhost:8081/api/citizen/complaints", {
-        headers: { Authorization: "Bearer " + token },
-      });
+      const response = await fetch(
+        `${API_URL}/api/citizen/complaints`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      const data = await res.json();
-      console.log("📦 Complaints from API:", data);
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+
+      const data = await response.json();
 
       setComplaints(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("❌ Error fetching complaints:", error);
+      console.error("Error fetching complaints:", error);
+
+      setComplaintError(
+        "Failed to load complaints. Please try again."
+      );
+
       setComplaints([]);
     } finally {
       setComplaintLoading(false);
     }
   }, [token]);
 
+  // ── Initial Fetch ──────────────────────────────────────────
   useEffect(() => {
     fetchComplaints();
   }, [fetchComplaints]);
 
-  // ================= WEBSOCKET NOTIFICATIONS =================
+  // ── WebSocket Notifications ────────────────────────────────
+  const subscribeToNotifications = useCallback((stompClient) => {
+    stompClient.subscribe("/user/queue/notify", (message) => {
+      const payload = JSON.parse(message.body);
+
+      // Update complaint status
+      setComplaints((prevComplaints) =>
+        prevComplaints.map((complaint) =>
+          complaint.id === payload.complaintId
+            ? {
+                ...complaint,
+                status: payload.status || payload.message,
+              }
+            : complaint
+        )
+      );
+
+      // Add notification
+      setNotifications((prevNotifications) => [
+        `Complaint #${payload.complaintId} status updated to ${payload.status}`,
+        ...prevNotifications,
+      ]);
+    });
+  }, []);
+
+  // ── Initialize WebSocket ───────────────────────────────────
   const initializeWebSocket = useCallback(async () => {
     try {
       const { Client } = await import("@stomp/stompjs");
       const { default: SockJS } = await import("sockjs-client");
 
-      const socket = new SockJS("http://localhost:8081/ws");
       const stompClient = new Client({
-        webSocketFactory: () => socket,
-        connectHeaders: { Authorization: `Bearer ${token}` },
-        debug: (str) => console.log("STOMP: " + str),
+        webSocketFactory: () => new SockJS(WS_URL),
+
+        connectHeaders: {
+          Authorization: `Bearer ${token}`,
+        },
+
+        debug: () => {},
+
         reconnectDelay: 5000,
+
         heartbeatIncoming: 10000,
         heartbeatOutgoing: 10000,
+
         onConnect: () => {
-          console.log("✅ WebSocket connected");
           subscribeToNotifications(stompClient);
+        },
+
+        onStompError: (frame) => {
+          console.error("Broker error:", frame);
+        },
+
+        onWebSocketError: (error) => {
+          console.error("WebSocket error:", error);
         },
       });
 
       stompClient.activate();
+
       return stompClient;
     } catch (error) {
-      console.error("WebSocket initialization error:", error);
+      console.error("WebSocket initialization failed:", error);
       return null;
     }
-  }, [token]);
+  }, [token, subscribeToNotifications]);
 
-  const subscribeToNotifications = useCallback((stompClient) => {
-    stompClient.subscribe("/user/queue/notify", (message) => {
-      const payload = JSON.parse(message.body);
-      console.log("🟢 Received notification:", payload);
-
-      // Update complaint list live
-      setComplaints((prev) =>
-        prev.map((c) =>
-          c.id === payload.complaintId
-            ? { ...c, status: payload.status || payload.message }
-            : c
-        )
-      );
-
-      // Add notification to notifications list
-      const messageText = `Complaint #${payload.complaintId} status updated to ${payload.status}`;
-      setNotifications((prev) => [messageText, ...prev]);
-    });
-  }, []);
-
+  // ── Start WebSocket ────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
 
     let stompClient;
+
     initializeWebSocket().then((client) => {
       stompClient = client;
     });
 
     return () => {
-      if (stompClient) stompClient.deactivate();
+      if (stompClient) {
+        stompClient.deactivate();
+      }
     };
   }, [token, initializeWebSocket]);
 
+  // ── Render ─────────────────────────────────────────────────
   return (
     <div className="dashboard-shell">
-      <Sidebar selected={selected} setSelected={setSelected} notifications={notifications} navigate={navigate} />
+      <Sidebar
+        selected={selected}
+        setSelected={setSelected}
+        notifications={notifications}
+        navigate={navigate}
+      />
 
       <div className="dashboard-content">
+        {/* Header */}
         <header className="dashboard-header">
-          <h1 className="dashboard-header-title">Citizen Dashboard</h1>
-          
+          <h1 className="dashboard-header-title">
+            Citizen Dashboard
+          </h1>
+
           <div className="dashboard-header-actions">
-            <button type="button" className="theme-toggle" onClick={toggleTheme}>
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+            >
               {theme === "dark" ? <Sun /> : <Moon />}
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
+
+              <span>
+                {theme === "dark" ? "Light" : "Dark"}
+              </span>
             </button>
           </div>
         </header>
 
+        {/* Body */}
         <div className="dashboard-body">
           {selected === "Dashboard" && (
             <ComplaintsTable
               complaints={complaints}
               loading={complaintLoading}
+              error={complaintError}
               fetchComplaints={fetchComplaints}
               onFeedback={(complaint) => {
                 setFeedbackComplaint(complaint);
@@ -146,7 +206,10 @@ const UserDashboard = () => {
           )}
 
           {selected === "Submit Grievance" && (
-            <SubmitGrievance complaints={complaints} setComplaints={setComplaints} />
+            <SubmitGrievance
+              complaints={complaints}
+              setComplaints={setComplaints}
+            />
           )}
 
           {selected === "Track Complaints" && (
@@ -168,7 +231,9 @@ const UserDashboard = () => {
             <FeedbackContainer
               complaints={complaints}
               selectedComplaint={feedbackComplaint}
-              clearSelection={() => setFeedbackComplaint(null)}
+              clearSelection={() =>
+                setFeedbackComplaint(null)
+              }
             />
           )}
 
@@ -182,4 +247,3 @@ const UserDashboard = () => {
 };
 
 export default UserDashboard;
-

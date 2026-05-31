@@ -5,14 +5,9 @@ import { Upload, MapPin, Check } from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
 import MapSelector from "./MapSelector";
 
-/**
- * 🔑 IMPORTANT:
- * Receive setComplaints from UserDashboard
- */
+const API_URL = import.meta.env.VITE_API_URL;
+
 const SubmitGrievance = ({ setComplaints }) => {
-  const propTypes = {
-    setComplaints: "function",
-  };
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -51,7 +46,6 @@ const SubmitGrievance = ({ setComplaints }) => {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
-    // 🔥 OPTIMISTIC TEMP COMPLAINT
     const tempComplaint = {
       id: "temp-" + Date.now(),
       title: formData.title,
@@ -62,9 +56,7 @@ const SubmitGrievance = ({ setComplaints }) => {
       location: formData.location,
     };
 
-    // ✅ 1. SHOW IMMEDIATELY IN UI
     setComplaints((prev) => [tempComplaint, ...prev]);
-
     setLoading(true);
 
     try {
@@ -77,7 +69,7 @@ const SubmitGrievance = ({ setComplaints }) => {
       if (imageFile) fd.append("image", imageFile);
 
       const { data } = await axios.post(
-        "http://localhost:8081/api/citizen/complaints/submit",
+        `${API_URL}/api/citizen/complaints/submit`,
         fd,
         {
           headers: {
@@ -87,24 +79,16 @@ const SubmitGrievance = ({ setComplaints }) => {
         }
       );
 
-      // ✅ 2. REPLACE TEMP WITH REAL COMPLAINT
       setComplaints((prev) =>
         prev.map((c) => (c.id === tempComplaint.id ? data : c))
       );
 
-      toast.success(`Grievance submitted! ID: ${data.id}`, {
-        autoClose: 1500,
-      });
-
+      toast.success(`Grievance submitted! ID: ${data.id}`, { autoClose: 1500 });
       handleCancel();
-    } catch (err) {
-      console.error(err);
-
-      // ❌ 3. ROLLBACK TEMP DATA
+    } catch {
       setComplaints((prev) =>
         prev.filter((c) => c.id !== tempComplaint.id)
       );
-
       toast.error("Failed to submit grievance");
     } finally {
       setLoading(false);
@@ -147,7 +131,7 @@ const SubmitGrievance = ({ setComplaints }) => {
         </p>
       </div>
 
-      <div style={{ height: "1px", background: "var(--border-soft)", marginBottom: "2rem" }}></div>
+      <div style={{ height: "1px", background: "var(--border-soft)", marginBottom: "2rem" }} />
 
       {/* Form Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem" }}>
@@ -187,7 +171,7 @@ const SubmitGrievance = ({ setComplaints }) => {
           {errors.title && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.title}</p>}
         </div>
 
-        {/* Category & Location in 2 cols */}
+        {/* Category & Location */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "1.5rem" }}>
           <div>
             <label htmlFor="category" style={{ display: "block", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
@@ -352,9 +336,9 @@ const SubmitGrievance = ({ setComplaints }) => {
           {imageFile && <p style={{ margin: "0.5rem 0 0", color: "var(--primary)", fontSize: "0.85rem" }}>✓ {imageFile.name}</p>}
         </div>
 
-        <div style={{ height: "1px", background: "var(--border-soft)" }}></div>
+        <div style={{ height: "1px", background: "var(--border-soft)" }} />
 
-        {/* Citizen Info Section */}
+        {/* Citizen Info */}
         <div>
           <h3 style={{ margin: "0 0 1rem", fontSize: "1.1rem", fontWeight: "600", color: "var(--text-primary)" }}>
             Your Information
@@ -364,7 +348,8 @@ const SubmitGrievance = ({ setComplaints }) => {
               <label htmlFor="citizenName" style={{ display: "block", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
                 Name *
               </label>
-              <input id="citizenName"
+              <input
+                id="citizenName"
                 type="text"
                 placeholder="Your full name"
                 name="citizenName"
@@ -415,12 +400,12 @@ const SubmitGrievance = ({ setComplaints }) => {
             </div>
           </div>
         </div>
-
       </div>
 
       {/* Action Buttons */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginTop: "2rem" }}>
         <button
+          type="button"
           onClick={handleSubmit}
           disabled={loading}
           style={{
@@ -473,6 +458,7 @@ const SubmitGrievance = ({ setComplaints }) => {
         </button>
 
         <button
+          type="button"
           onClick={handleCancel}
           disabled={loading}
           style={{
