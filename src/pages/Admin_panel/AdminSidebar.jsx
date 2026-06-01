@@ -3,15 +3,16 @@ import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 import {
   LayoutGrid, FileText, UserPlus, BarChart3,
-  MessageSquare, User, LogOut,
+  MessageSquare, User, LogOut, ClipboardList, // ✅ Better icon for OfficerRequest
 } from "lucide-react";
 import logoImg from "../../assets/Logo.jpg";
+import { handleLogout } from "../Citizen_panel/Dashboard/Sidebar"; // ✅ Shared logout
 
 const menuItems = [
   { label: "Dashboard",      icon: LayoutGrid },
   { label: "All Complaints", icon: FileText },
   { label: "Create Officer", icon: UserPlus },
-  { label: "OfficerRequest", icon: UserPlus },
+  { label: "OfficerRequest", icon: ClipboardList }, // ✅ Different icon from Create Officer
   { label: "Analytics",      icon: BarChart3 },
   { label: "Feedback",       icon: MessageSquare },
   { label: "Profile",        icon: User },
@@ -23,8 +24,7 @@ const AdminSidebar = ({ selected, setSelected }) => {
 
   const handleNavigation = (item) => {
     if (item.isLogout) {
-      localStorage.removeItem("adminToken");
-      navigate("/");
+      handleLogout(navigate); // ✅ Clears token + role from both storages
     } else {
       setSelected(item.label);
     }
@@ -50,6 +50,7 @@ const AdminSidebar = ({ selected, setSelected }) => {
                   className={`dashboard-nav-button ${isActive ? "active" : ""}`}
                   onClick={() => handleNavigation(item)}
                   style={item.isLogout ? { color: "var(--accent)" } : {}}
+                  aria-label={item.label}
                 >
                   <Icon size={20} />
                   <span>{item.label}</span>

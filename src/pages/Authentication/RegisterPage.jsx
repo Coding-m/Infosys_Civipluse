@@ -49,32 +49,26 @@ export default function RegisterPage() {
       toast.error("Full name is required.");
       return false;
     }
-
     if (!address.trim()) {
       toast.error("Address is required.");
       return false;
     }
-
     if (!age || Number(age) < 18) {
       toast.error("You must be at least 18 years old.");
       return false;
     }
-
     if (!phoneRegex.test(phoneNo)) {
       toast.error("Enter a valid 10-digit phone number.");
       return false;
     }
-
     if (!emailRegex.test(email.trim())) {
       toast.error("Enter a valid email address.");
       return false;
     }
-
     if (password.length < 6) {
       toast.error("Password must be at least 6 characters.");
       return false;
     }
-
     if (password !== confirmPassword) {
       toast.error("Passwords do not match.");
       return false;
@@ -100,13 +94,13 @@ export default function RegisterPage() {
           password: form.password,
         };
 
-        const response = await citizenSignup(signupData);
-        toast.success("Registration successful!");
-        console.log(response.data);
-
+        await citizenSignup(signupData);
+        // ✅ Removed console.log(response.data) — not needed in production
+        toast.success("Registration successful! Please login.");
         navigate("/", { replace: true });
+
       } catch (error) {
-        console.error(error);
+        // ✅ Removed console.error — handled by axios interceptor
         const message =
           error?.response?.data?.message ||
           "Registration failed. Please try again.";
@@ -288,7 +282,11 @@ export default function RegisterPage() {
               </div>
             </fieldset>
 
-            <button type="submit" className="primary-btn" disabled={isLoading}>
+            <button
+              type="submit"
+              className="primary-btn"
+              disabled={isLoading}
+            >
               {isLoading ? (
                 <>
                   <span className="spinner" />
@@ -304,4 +302,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

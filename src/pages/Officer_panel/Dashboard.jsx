@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Moon, Sun, Search } from "lucide-react";
-import axios from "axios";
+import { useNavigate } from "react-router-dom"; // ✅ Added for auth guard
 import { useThemePreference } from "../../hooks/useThemePreference.js";
-import { Box } from "@mui/material";
+import api from "../../api/axios.js"; // ✅ Use configured axios instance
 
 import Sidebar from "./Sidebar";
 import SummaryCards from "./SummaryCards";
@@ -12,53 +12,72 @@ import UpdateGrievanceModal from "./UpdateGrievanceModal";
 import EditProfile from "./ProfileDetaills";
 import OfficerFeedback from "./Feedback/OfficerFeedback";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
 const Dashboard = () => {
   const { theme, toggleTheme } = useThemePreference();
-  const [selected, setSelected]               = useState("Dashboard");
-  const [complaints, setComplaints]           = useState([]);
-  const [search, setSearch]                   = useState("");
-  const [modalOpen, setModalOpen]             = useState(false);
+  const navigate = useNavigate();
+
+  const [selected, setSelected]                   = useState("Dashboard");
+  const [complaints, setComplaints]               = useState([]);
+  const [search, setSearch]                       = useState("");
+  const [loading, setLoading]                     = useState(false); // ✅ Added
+  const [error, setError]                         = useState(null);  // ✅ Added
+  const [modalOpen, setModalOpen]                 = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [filters]                             = useState({
+  const [filters]                                 = useState({
     status: "All", priority: "All", category: "All",
   });
 
-  // ── Image normalizer ──────────────────────────────────────────────────────
+  // ✅ Read from both storages
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  const role  = localStorage.getItem("role")  || sessionStorage.getItem("role");
+
+  // ✅ Auth guard
+  useEffect(() => {
+    if (!token || role !== "OFFICER") {
+      navigate("/", { replace: true });
+    }
+  }, [token, role, navigate]);
+
+  // ✅ Image normalizer — Cloudinary URLs start with https
+  // Local /uploads/ paths no longer exist — return null for them
   const normalizeImageUrl = (imageUrl) => {
     if (!imageUrl) return null;
-    if (imageUrl.startsWith("http")) return encodeURI(imageUrl);
-    if (imageUrl.startsWith("/uploads")) return encodeURI(`${API_URL}${imageUrl}`);
-    return encodeURI(`${API_URL}/uploads/officer/${imageUrl}`);
+    if (imageUrl.startsWith("https://")) return imageUrl; // ✅ Cloudinary URL
+    return null; // ✅ Old local paths — no longer valid
   };
 
-  // ── Fetch complaints (reusable) ───────────────────────────────────────────
+  // ── Fetch Complaints ──────────────────────────────────────────────────────
   const fetchComplaints = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`${API_URL}/api/officer/complaints`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      setLoading(true);
+      setError(null);
+
+      // ✅ Use api instance — no manual token needed
+      const res = await api.get("/api/officer/complaints");
 
       const fixedData = res.data.map((c) => ({
         ...c,
         imageUrl: normalizeImageUrl(c.imageUrl),
+        officerEvidenceUrl: normalizeImageUrl(c.officerEvidenceUrl),
       }));
 
-      setComplaints(fixedData);
-    } catch {
-      // silently fail — complaints remain as-is
+      setComplaints(Array.isArray(fixedData) ? fixedData : []);
+
+    } catch (err) {
+      if (err?.response?.status !== 401) {
+        setError("Failed to load complaints. Please try again.");
+      }
+    } finally {
+      setLoading(false);
     }
   }, []);
 
+  // ── Initial Fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
-    let active = true;
-    (async () => {
-      if (active) await fetchComplaints();
-    })();
-    return () => { active = false; };
-  }, [fetchComplaints]);
+    if (token && role === "OFFICER") {
+      fetchComplaints();
+    }
+  }, [fetchComplaints, token, role]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleViewDetails = (complaint) => {
@@ -71,9 +90,10 @@ const Dashboard = () => {
     setSelectedComplaint(null);
   };
 
-  // ── Derived state ─────────────────────────────────────────────────────────
-  const countByStatus = (status) =>
-    complaints.filter((c) => c.status === status).length;
+  // ── Derived State ─────────────────────────────────────────────────────────
+  const countByStatus = useCallback((status) =>
+    complaints.filter((c) => c.status === status).length,
+  [complaints]);
 
   const filteredComplaints = complaints.filter((c) => {
     const matchesSearch =
@@ -101,8 +121,13 @@ const Dashboard = () => {
         <header className="dashboard-header">
           <h1 className="dashboard-header-title">{selected}</h1>
           <div className="dashboard-header-actions">
-            <button type="button" className="theme-toggle" onClick={toggleTheme}>
-              {theme === "dark" ? <Sun /> : <Moon />}
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label="Toggle Theme"
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
               <span>{theme === "dark" ? "Light" : "Dark"}</span>
             </button>
           </div>
@@ -111,24 +136,67 @@ const Dashboard = () => {
         <div className="dashboard-body">
           {selected === "Dashboard" && (
             <>
-              <Box sx={{ mb: 4 }}>
-                <SummaryCards counts={summaryCounts} />
-              </Box>
+              <SummaryCards counts={summaryCounts} />
 
-              <Box sx={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", mb: 4, p: 3, background: "var(--surface)", borderRadius: "24px", border: "1px solid var(--border-soft)", boxShadow: "var(--card-shadow)" }}>
+              {/* ✅ Error with retry */}
+              {error && (
+                <div style={{ color: "var(--accent)", padding: "1rem", marginBottom: "1rem" }}>
+                  {error}
+                  <button
+                    onClick={fetchComplaints}
+                    style={{ marginLeft: "0.5rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", margin: "2rem 0", padding: "1.5rem", background: "var(--surface)", borderRadius: "24px", border: "1px solid var(--border-soft)" }}>
                 <div style={{ position: "relative", flex: 1, minWidth: "300px" }}>
                   <Search size={20} color="var(--text-muted)" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }} />
                   <input
                     type="text"
-                    placeholder="Search for complaints..."
+                    placeholder="Search complaints..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    style={{ padding: "0.8rem 1rem 0.8rem 2.8rem", borderRadius: "14px", border: "1px solid var(--border)", background: "rgba(0,0,0,0.02)", color: "var(--text-primary)", fontSize: "0.95rem", width: "100%", outline: "none" }}
+                    style={{
+                      padding: "0.8rem 1rem 0.8rem 2.8rem",
+                      borderRadius: "14px",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      color: "var(--text-primary)",
+                      fontSize: "0.95rem",
+                      width: "100%",
+                      outline: "none",
+                      boxSizing: "border-box",
+                    }}
                   />
                 </div>
-              </Box>
 
-              <RecentComplaintsTable complaints={filteredComplaints.slice(0, 5)} />
+                {/* ✅ Refresh button */}
+                <button
+                  type="button"
+                  onClick={fetchComplaints}
+                  disabled={loading}
+                  style={{
+                    padding: "0.8rem 1.5rem",
+                    borderRadius: "14px",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                    color: "var(--text-primary)",
+                    fontSize: "0.95rem",
+                    fontWeight: "600",
+                    cursor: loading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {loading ? "Loading..." : "↻ Refresh"}
+                </button>
+              </div>
+
+              <RecentComplaintsTable
+                complaints={filteredComplaints.slice(0, 5)}
+                loading={loading}
+              />
             </>
           )}
 
@@ -136,6 +204,7 @@ const Dashboard = () => {
             <AllComplaintsCards
               complaints={filteredComplaints}
               onViewDetails={handleViewDetails}
+              loading={loading}
             />
           )}
 

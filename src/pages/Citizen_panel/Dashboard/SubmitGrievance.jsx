@@ -1,36 +1,63 @@
 import React, { useState } from "react";
-import axios from "axios";
-import { ToastContainer, toast } from "react-toastify";
+import { toast } from "react-toastify";
 import { Upload, MapPin, Check } from "lucide-react";
-import "react-toastify/dist/ReactToastify.css";
+import api from "../../../api/axios.js"; // ✅ Use configured axios instance
 import MapSelector from "./MapSelector";
 
-const API_URL = import.meta.env.VITE_API_URL;
+// ✅ Match your backend ComplaintCategory enum exactly
+const CATEGORIES = [
+  { value: "ELECTRICITY", label: "Electricity" },
+  { value: "WATER",       label: "Water" },
+  { value: "ROADS",        label: "Roads" },       // ✅ Check your backend enum name
+  { value: "SANITATION",  label: "Sanitation" },
+  { value: "TRAFFIC",     label: "Traffic" },
+  { value: "OTHER",       label: "Other" },
+];
+
+const INITIAL_FORM = {
+  title: "",
+  description: "",
+  category: "",
+  location: "",
+  citizenName: "",
+  citizenPhone: "",
+};
 
 const SubmitGrievance = ({ setComplaints }) => {
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    category: "",
-    location: "",
-    citizenName: "",
-    citizenPhone: "",
-  });
-
+  const [formData, setFormData]     = useState(INITIAL_FORM);
   const [coordinates, setCoordinates] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(false);
+  const [imageFile, setImageFile]   = useState(null);
+  const [errors, setErrors]         = useState({});
+  const [loading, setLoading]       = useState(false);
+
+  // ✅ Image size validation — matches backend 10MB limit
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
   const validateForm = () => {
-    let newErrors = {};
-    if (!formData.title.trim()) newErrors.title = "Title is required";
-    if (!coordinates) newErrors.location = "Please select location on map";
-    if (!formData.category) newErrors.category = "Category required";
-    if (!formData.description.trim()) newErrors.description = "Description required";
-    if (!formData.citizenName.trim()) newErrors.citizenName = "Name required";
-    if (!/^\d{10}$/.test(formData.citizenPhone))
-      newErrors.citizenPhone = "Invalid 10-digit phone";
+    const newErrors = {};
+
+    if (!formData.title.trim())
+      newErrors.title = "Title is required";
+
+    if (!formData.category)
+      newErrors.category = "Category is required";
+
+    if (!formData.description.trim())
+      newErrors.description = "Description is required";
+
+    if (!formData.citizenName.trim())
+      newErrors.citizenName = "Name is required";
+
+    if (!/^[6-9]\d{9}$/.test(formData.citizenPhone))
+      newErrors.citizenPhone = "Enter a valid 10-digit Indian phone number";
+
+    if (!coordinates)
+      newErrors.location = "Please select location on map";
+
+    // ✅ Validate image size
+    if (imageFile && imageFile.size > MAX_IMAGE_SIZE)
+      newErrors.image = "Image must be less than 10MB";
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -41,13 +68,18 @@ const SubmitGrievance = ({ setComplaints }) => {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+    // ✅ Clear error on change
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
+    // ✅ Optimistic UI — add temp complaint immediately
     const tempComplaint = {
-      id: "temp-" + Date.now(),
+      id: `temp-${Date.now()}`,
       title: formData.title,
       description: formData.description,
       category: formData.category,
@@ -60,54 +92,80 @@ const SubmitGrievance = ({ setComplaints }) => {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
       const fd = new FormData();
-
       Object.keys(formData).forEach((k) => fd.append(k, formData[k]));
       fd.append("latitude", coordinates.lat);
       fd.append("longitude", coordinates.lng);
       if (imageFile) fd.append("image", imageFile);
 
-      const { data } = await axios.post(
-        `${API_URL}/api/citizen/complaints/submit`,
+      // ✅ Use api instance — no manual token needed
+      const { data } = await api.post(
+        "/api/citizen/complaints/submit",
         fd,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 60000, // ✅ 60s for image upload — Cloudinary can be slow
         }
       );
 
+      // ✅ Replace temp with real complaint from server
       setComplaints((prev) =>
         prev.map((c) => (c.id === tempComplaint.id ? data : c))
       );
 
-      toast.success(`Grievance submitted! ID: ${data.id}`, { autoClose: 1500 });
+      toast.success(`Grievance submitted! ID: ${data.id}`, { autoClose: 3000 });
       handleCancel();
-    } catch {
+
+    } catch (error) {
+      // ✅ Remove temp complaint on failure
       setComplaints((prev) =>
         prev.filter((c) => c.id !== tempComplaint.id)
       );
-      toast.error("Failed to submit grievance");
+
+      toast.error(
+        error?.response?.data?.message ||
+        "Failed to submit grievance. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    setFormData({
-      title: "",
-      description: "",
-      category: "",
-      location: "",
-      citizenName: "",
-      citizenPhone: "",
-    });
+    setFormData(INITIAL_FORM);
     setCoordinates(null);
     setImageFile(null);
     setErrors({});
   };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // ✅ Validate image size before setting
+    if (file.size > MAX_IMAGE_SIZE) {
+      setErrors((prev) => ({ ...prev, image: "Image must be less than 10MB" }));
+      e.target.value = ""; // ✅ Reset file input
+      return;
+    }
+
+    setImageFile(file);
+    setErrors((prev) => ({ ...prev, image: undefined }));
+  };
+
+  // Shared input style helper
+  const inputStyle = (hasError) => ({
+    width: "100%",
+    padding: "0.85rem 1rem",
+    borderRadius: "14px",
+    border: `1px solid ${hasError ? "var(--accent)" : "var(--border)"}`,
+    background: "color-mix(in srgb, var(--surface) 95%, transparent)",
+    color: "var(--text-primary)",
+    fontSize: "1rem",
+    fontFamily: "inherit",
+    transition: "border 0.2s ease, box-shadow 0.2s ease",
+    boxSizing: "border-box",
+  });
 
   return (
     <div style={{
@@ -119,7 +177,6 @@ const SubmitGrievance = ({ setComplaints }) => {
       maxWidth: 900,
       margin: "0 auto",
     }}>
-      <ToastContainer />
 
       {/* Header */}
       <div style={{ marginBottom: "2.5rem" }}>
@@ -133,8 +190,8 @@ const SubmitGrievance = ({ setComplaints }) => {
 
       <div style={{ height: "1px", background: "var(--border-soft)", marginBottom: "2rem" }} />
 
-      {/* Form Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem" }}>
+
         {/* Title */}
         <div>
           <label htmlFor="title" style={{ display: "block", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
@@ -147,26 +204,8 @@ const SubmitGrievance = ({ setComplaints }) => {
             name="title"
             value={formData.title}
             onChange={handleInputChange}
-            style={{
-              width: "100%",
-              padding: "0.85rem 1rem",
-              borderRadius: "14px",
-              border: `1px solid ${errors.title ? "var(--accent)" : "var(--border)"}`,
-              background: "color-mix(in srgb, var(--surface) 95%, transparent)",
-              color: "var(--text-primary)",
-              fontSize: "1rem",
-              fontFamily: "inherit",
-              transition: "border 0.2s ease, box-shadow 0.2s ease",
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = errors.title ? "var(--accent)" : "var(--primary)";
-              e.currentTarget.style.boxShadow = errors.title ? "0 0 0 4px rgba(249, 115, 22, 0.1)" : "0 0 0 4px rgba(43, 80, 255, 0.1)";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = errors.title ? "var(--accent)" : "var(--border)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
+            maxLength={200}
+            style={inputStyle(errors.title)}
           />
           {errors.title && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.title}</p>}
         </div>
@@ -182,42 +221,21 @@ const SubmitGrievance = ({ setComplaints }) => {
               name="category"
               value={formData.category}
               onChange={handleInputChange}
-              style={{
-                width: "100%",
-                padding: "0.85rem 1rem",
-                borderRadius: "14px",
-                border: `1px solid ${errors.category ? "var(--accent)" : "var(--border)"}`,
-                background: "color-mix(in srgb, var(--surface) 95%, transparent)",
-                color: "var(--text-primary)",
-                fontSize: "1rem",
-                fontFamily: "inherit",
-                cursor: "pointer",
-                transition: "border 0.2s ease, box-shadow 0.2s ease",
-                boxSizing: "border-box",
-              }}
-              onFocus={(e) => {
-                e.currentTarget.style.borderColor = errors.category ? "var(--accent)" : "var(--primary)";
-                e.currentTarget.style.boxShadow = errors.category ? "0 0 0 4px rgba(249, 115, 22, 0.1)" : "0 0 0 4px rgba(43, 80, 255, 0.1)";
-              }}
-              onBlur={(e) => {
-                e.currentTarget.style.borderColor = errors.category ? "var(--accent)" : "var(--border)";
-                e.currentTarget.style.boxShadow = "none";
-              }}
+              style={inputStyle(errors.category)}
             >
               <option value="">Select a category...</option>
-              <option value="ELECTRICITY">Electricity</option>
-              <option value="WATER">Water</option>
-              <option value="ROADS">Roads</option>
-              <option value="SANITATION">Sanitation</option>
-              <option value="TRAFFIC">Traffic</option>
-              <option value="OTHER">Other</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat.value} value={cat.value}>
+                  {cat.label}
+                </option>
+              ))}
             </select>
             {errors.category && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.category}</p>}
           </div>
 
           <div>
             <label htmlFor="location" style={{ display: "block", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.5rem" }}>
-              📍 Location (Optional)
+              📍 Location Name (Optional)
             </label>
             <input
               id="location"
@@ -226,33 +244,21 @@ const SubmitGrievance = ({ setComplaints }) => {
               name="location"
               value={formData.location}
               onChange={handleInputChange}
-              style={{
-                width: "100%",
-                padding: "0.85rem 1rem",
-                borderRadius: "14px",
-                border: "1px solid var(--border)",
-                background: "color-mix(in srgb, var(--surface) 95%, transparent)",
-                color: "var(--text-primary)",
-                fontSize: "1rem",
-                fontFamily: "inherit",
-                transition: "border 0.2s ease, box-shadow 0.2s ease",
-                boxSizing: "border-box",
-              }}
+              maxLength={200}
+              style={inputStyle(false)}
             />
           </div>
         </div>
 
-        {/* Map Section */}
+        {/* Map */}
         <div>
-          <label htmlFor="mapSelect" style={{ display: "flex", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.75rem", alignItems: "center", gap: "0.5rem" }}>
-            <MapPin size={18} />
-            Select Location on Map *
+          <label style={{ display: "flex", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.75rem", alignItems: "center", gap: "0.5rem" }}>
+            <MapPin size={18} /> Select Location on Map *
           </label>
           <div style={{
             borderRadius: "16px",
             overflow: "hidden",
             border: `2px solid ${errors.location ? "var(--accent)" : "var(--border-soft)"}`,
-            transition: "border 0.2s ease",
           }}>
             <MapSelector onLocationSelect={(latlng) => setCoordinates(latlng)} />
           </div>
@@ -276,27 +282,8 @@ const SubmitGrievance = ({ setComplaints }) => {
             value={formData.description}
             onChange={handleInputChange}
             rows="5"
-            style={{
-              width: "100%",
-              padding: "0.85rem 1rem",
-              borderRadius: "14px",
-              border: `1px solid ${errors.description ? "var(--accent)" : "var(--border)"}`,
-              background: "color-mix(in srgb, var(--surface) 95%, transparent)",
-              color: "var(--text-primary)",
-              fontSize: "1rem",
-              fontFamily: "inherit",
-              resize: "vertical",
-              transition: "border 0.2s ease, box-shadow 0.2s ease",
-              boxSizing: "border-box",
-            }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = errors.description ? "var(--accent)" : "var(--primary)";
-              e.currentTarget.style.boxShadow = errors.description ? "0 0 0 4px rgba(249, 115, 22, 0.1)" : "0 0 0 4px rgba(43, 80, 255, 0.1)";
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = errors.description ? "var(--accent)" : "var(--border)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
+            maxLength={1000}
+            style={{ ...inputStyle(errors.description), resize: "vertical" }}
           />
           {errors.description && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.description}</p>}
         </div>
@@ -304,36 +291,31 @@ const SubmitGrievance = ({ setComplaints }) => {
         {/* Image Upload */}
         <div>
           <label htmlFor="fileInput" style={{ display: "flex", fontSize: "0.9rem", fontWeight: "600", color: "var(--text-primary)", marginBottom: "0.75rem", alignItems: "center", gap: "0.5rem" }}>
-            <Upload size={18} />
-            Upload Image (Optional)
+            <Upload size={18} /> Upload Image (Optional — max 10MB)
           </label>
           <input
             id="fileInput"
             type="file"
-            accept="image/*"
-            onChange={(e) => setImageFile(e.target.files[0])}
+            accept="image/png, image/jpeg, image/jpg" // ✅ Match backend allowed types
+            onChange={handleImageChange}
             style={{
               width: "100%",
               padding: "1rem",
               borderRadius: "14px",
-              border: "2px dashed var(--border)",
+              border: `2px dashed ${errors.image ? "var(--accent)" : "var(--border)"}`,
               background: "color-mix(in srgb, var(--surface) 95%, transparent)",
               color: "var(--text-primary)",
               fontSize: "0.9rem",
               cursor: "pointer",
-              transition: "border 0.2s ease, background 0.2s ease",
               boxSizing: "border-box",
             }}
-            onDragEnter={(e) => {
-              e.currentTarget.style.borderColor = "var(--primary)";
-              e.currentTarget.style.background = "color-mix(in srgb, var(--primary) 5%, transparent)";
-            }}
-            onDragLeave={(e) => {
-              e.currentTarget.style.borderColor = "var(--border)";
-              e.currentTarget.style.background = "color-mix(in srgb, var(--surface) 95%, transparent)";
-            }}
           />
-          {imageFile && <p style={{ margin: "0.5rem 0 0", color: "var(--primary)", fontSize: "0.85rem" }}>✓ {imageFile.name}</p>}
+          {imageFile && !errors.image && (
+            <p style={{ margin: "0.5rem 0 0", color: "var(--primary)", fontSize: "0.85rem" }}>
+              ✓ {imageFile.name} ({(imageFile.size / 1024 / 1024).toFixed(2)} MB)
+            </p>
+          )}
+          {errors.image && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.image}</p>}
         </div>
 
         <div style={{ height: "1px", background: "var(--border-soft)" }} />
@@ -355,18 +337,8 @@ const SubmitGrievance = ({ setComplaints }) => {
                 name="citizenName"
                 value={formData.citizenName}
                 onChange={handleInputChange}
-                style={{
-                  width: "100%",
-                  padding: "0.85rem 1rem",
-                  borderRadius: "14px",
-                  border: `1px solid ${errors.citizenName ? "var(--accent)" : "var(--border)"}`,
-                  background: "color-mix(in srgb, var(--surface) 95%, transparent)",
-                  color: "var(--text-primary)",
-                  fontSize: "1rem",
-                  fontFamily: "inherit",
-                  transition: "border 0.2s ease, box-shadow 0.2s ease",
-                  boxSizing: "border-box",
-                }}
+                maxLength={100}
+                style={inputStyle(errors.citizenName)}
               />
               {errors.citizenName && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.citizenName}</p>}
             </div>
@@ -382,19 +354,8 @@ const SubmitGrievance = ({ setComplaints }) => {
                 name="citizenPhone"
                 value={formData.citizenPhone}
                 onChange={handleInputChange}
-                maxLength="10"
-                style={{
-                  width: "100%",
-                  padding: "0.85rem 1rem",
-                  borderRadius: "14px",
-                  border: `1px solid ${errors.citizenPhone ? "var(--accent)" : "var(--border)"}`,
-                  background: "color-mix(in srgb, var(--surface) 95%, transparent)",
-                  color: "var(--text-primary)",
-                  fontSize: "1rem",
-                  fontFamily: "inherit",
-                  transition: "border 0.2s ease, box-shadow 0.2s ease",
-                  boxSizing: "border-box",
-                }}
+                maxLength={10}
+                style={inputStyle(errors.citizenPhone)}
               />
               {errors.citizenPhone && <p style={{ margin: "0.5rem 0 0", color: "var(--accent)", fontSize: "0.85rem" }}>{errors.citizenPhone}</p>}
             </div>
@@ -417,36 +378,16 @@ const SubmitGrievance = ({ setComplaints }) => {
             fontSize: "1rem",
             fontWeight: "600",
             cursor: loading ? "not-allowed" : "pointer",
-            transition: "all 0.2s ease",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "0.5rem",
             fontFamily: "inherit",
           }}
-          onMouseEnter={(e) => {
-            if (!loading) {
-              e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = "0 20px 40px rgba(43, 80, 255, 0.3)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "none";
-          }}
         >
           {loading ? (
             <>
-              <div style={{
-                display: "inline-block",
-                width: "16px",
-                height: "16px",
-                borderRadius: "50%",
-                border: "2px solid white",
-                borderTopColor: "transparent",
-                animation: "spin 1s linear infinite",
-              }} />
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <span className="spinner" />
               Submitting...
             </>
           ) : (
@@ -470,19 +411,8 @@ const SubmitGrievance = ({ setComplaints }) => {
             fontSize: "1rem",
             fontWeight: "600",
             cursor: loading ? "not-allowed" : "pointer",
-            transition: "all 0.2s ease",
             fontFamily: "inherit",
             opacity: loading ? 0.5 : 1,
-          }}
-          onMouseEnter={(e) => {
-            if (!loading) {
-              e.currentTarget.style.background = "color-mix(in srgb, var(--primary) 5%, transparent)";
-              e.currentTarget.style.borderColor = "var(--primary)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.borderColor = "var(--border)";
           }}
         >
           Clear Form

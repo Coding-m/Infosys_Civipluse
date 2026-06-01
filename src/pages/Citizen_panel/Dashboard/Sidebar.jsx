@@ -21,11 +21,19 @@ const sidebarItems = [
   { label: "Logout",           icon: LogOut, isLogout: true },
 ];
 
+// ✅ Reusable logout helper — same logic everywhere
+export const handleLogout = (navigate) => {
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("role");
+  navigate("/", { replace: true }); // ✅ replace — can't go back after logout
+};
+
 const Sidebar = ({ selected, setSelected, notifications, navigate }) => {
   const handleNavigation = (item) => {
     if (item.isLogout) {
-      localStorage.removeItem("token");
-      navigate("/");
+      handleLogout(navigate); // ✅ Use shared logout helper
     } else {
       setSelected(item.label);
     }
@@ -43,7 +51,10 @@ const Sidebar = ({ selected, setSelected, notifications, navigate }) => {
           {sidebarItems.map((item) => {
             const Icon = item.icon;
             const isActive = selected === item.label;
-            const badge = item.label === "Notifications" ? (notifications?.length || 0) : 0;
+            const badge =
+              item.label === "Notifications"
+                ? notifications?.length || 0
+                : 0;
 
             return (
               <li key={item.label} className="dashboard-nav-item">
@@ -52,6 +63,7 @@ const Sidebar = ({ selected, setSelected, notifications, navigate }) => {
                   className={`dashboard-nav-button ${isActive ? "active" : ""}`}
                   onClick={() => handleNavigation(item)}
                   style={item.isLogout ? { color: "var(--accent)" } : {}}
+                  aria-label={item.label}
                 >
                   <Icon size={20} />
                   <span>{item.label}</span>

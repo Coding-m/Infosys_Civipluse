@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Moon, Sun } from "lucide-react";
+import { useNavigate } from "react-router-dom"; // ✅ Added for auth guard
 import { useThemePreference } from "../../hooks/useThemePreference.js";
 
 import AdminSidebar from "../Admin_panel/AdminSidebar";
@@ -13,55 +14,68 @@ import AdminProfile from "../Admin_panel/AdminProfile";
 import AdminNotifications from "../Admin_panel/AdminNotificationList";
 import AdminOfficerRequest from "./AdminOfficerRequest";
 
-import { connectWebSocket, disconnectWebSocket } from "../../hooks/useWebSocket";
 import { fetchAdminComplaints } from "../../api/admin";
+import useAdminWebSocket from "../../hooks/useAdminWebSocket"; // ✅ Use hook
 
 export default function AdminDashboard() {
   const { theme, toggleTheme } = useThemePreference();
-  const [selected, setSelected]   = useState("Dashboard");
+  const navigate = useNavigate();
+
+  const [selected, setSelected]     = useState("Dashboard");
   const [complaints, setComplaints] = useState([]);
-  const [search, setSearch]       = useState("");
-  const [filters, setFilters]     = useState({
+  const [loading, setLoading]       = useState(false); // ✅ Added loading state
+  const [error, setError]           = useState(null);  // ✅ Added error state
+  const [search, setSearch]         = useState("");
+  const [filters, setFilters]       = useState({
     status: "All", priority: "All", category: "All",
   });
 
-  // ── Load complaints (reusable) ────────────────────────────────────────────
+  // ✅ Read from both storages
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  const role  = localStorage.getItem("role")  || sessionStorage.getItem("role");
+
+  // ✅ Auth guard — redirect if not admin
+  useEffect(() => {
+    if (!token || role !== "ADMIN") {
+      navigate("/", { replace: true });
+    }
+  }, [token, role, navigate]);
+
+  // ✅ Use WebSocket hook — handles connection, reconnect, notifications
+  const { notifications, deleteNotification, clearAllNotifications } =
+    useAdminWebSocket();
+
+  // ── Load Complaints ───────────────────────────────────────────────────────
   const loadComplaints = useCallback(async () => {
     try {
+      setLoading(true);
+      setError(null);
       const res = await fetchAdminComplaints();
-      setComplaints(res.data || []);
-    } catch {
-      // silently fail — existing complaints remain
+      setComplaints(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      if (err?.response?.status !== 401) {
+        setError("Failed to load complaints. Please try again.");
+      }
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // ── Fetch + WebSocket ─────────────────────────────────────────────────────
+  // ── Initial Fetch ─────────────────────────────────────────────────────────
   useEffect(() => {
-    let isMounted = true;
-
-    (async () => {
-      if (isMounted) await loadComplaints();
-    })();
-
-    const ws = connectWebSocket({
-      onAdminNotify: (newComplaint) => {
-        if (isMounted) setComplaints((prev) => [newComplaint, ...prev]);
-      },
-    });
-
-    return () => {
-      isMounted = false;
-      disconnectWebSocket(ws);
-    };
-  }, [loadComplaints]);
+    if (token && role === "ADMIN") {
+      loadComplaints();
+    }
+  }, [loadComplaints, token, role]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const handleFilterChange = (field, value) => {
-    setFilters({ ...filters, [field]: value });
+    setFilters((prev) => ({ ...prev, [field]: value }));
   };
 
-  const countByStatus = (status) =>
-    complaints.filter((c) => c.status === status).length;
+  const countByStatus = useCallback((status) =>
+    complaints.filter((c) => c.status === status).length,
+  [complaints]);
 
   const filteredComplaints = complaints.filter((c) => {
     const matchesSearch =
@@ -89,8 +103,26 @@ export default function AdminDashboard() {
         <header className="dashboard-header">
           <h1 className="dashboard-header-title">{selected}</h1>
           <div className="dashboard-header-actions">
-            <button type="button" className="theme-toggle" onClick={toggleTheme}>
-              {theme === "dark" ? <Sun /> : <Moon />}
+            {/* ✅ Show notification count from WebSocket hook */}
+            {notifications.length > 0 && (
+              <span style={{
+                background: "var(--accent)",
+                color: "white",
+                borderRadius: "12px",
+                padding: "2px 10px",
+                fontSize: "0.85rem",
+                fontWeight: "600",
+              }}>
+                {notifications.length} new
+              </span>
+            )}
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label="Toggle Theme"
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
               <span>{theme === "dark" ? "Light" : "Dark"}</span>
             </button>
           </div>
@@ -101,6 +133,13 @@ export default function AdminDashboard() {
             <div className="dashboard-body-inner" style={{ padding: "1.5rem 2rem" }}>
               <AdminSummaryCards counts={summaryCounts} />
 
+              {/* ✅ Show error if complaints failed to load */}
+              {error && (
+                <div style={{ color: "var(--accent)", padding: "1rem", marginBottom: "1rem" }}>
+                  {error} <button onClick={loadComplaints} style={{ marginLeft: "0.5rem", color: "var(--primary)", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}>Retry</button>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", margin: "2rem 0", alignItems: "center" }}>
                 <div style={{ position: "relative", flex: 1, minWidth: "300px" }}>
                   <input
@@ -108,7 +147,13 @@ export default function AdminDashboard() {
                     placeholder="Quick search complaints..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    style={{ width: "100%", padding: "1rem 1.5rem", borderRadius: "18px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", fontSize: "1rem", boxShadow: "0 4px 15px rgba(0,0,0,0.03)", outline: "none", transition: "border-color 0.2s" }}
+                    style={{
+                      width: "100%", padding: "1rem 1.5rem",
+                      borderRadius: "18px", border: "1px solid var(--border)",
+                      background: "var(--surface)", color: "var(--text-primary)",
+                      fontSize: "1rem", outline: "none", transition: "border-color 0.2s",
+                      boxSizing: "border-box",
+                    }}
                     onFocus={(e) => { e.target.style.borderColor = "var(--primary)"; }}
                     onBlur={(e)  => { e.target.style.borderColor = "var(--border)"; }}
                   />
@@ -117,7 +162,12 @@ export default function AdminDashboard() {
                 <select
                   value={filters.status}
                   onChange={(e) => handleFilterChange("status", e.target.value)}
-                  style={{ padding: "1rem 1.5rem", borderRadius: "18px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", fontSize: "0.95rem", fontWeight: "600", cursor: "pointer", boxShadow: "0 4px 15px rgba(0,0,0,0.03)", outline: "none" }}
+                  style={{
+                    padding: "1rem 1.5rem", borderRadius: "18px",
+                    border: "1px solid var(--border)", background: "var(--surface)",
+                    color: "var(--text-primary)", fontSize: "0.95rem",
+                    fontWeight: "600", cursor: "pointer", outline: "none",
+                  }}
                 >
                   <option value="All">All Status</option>
                   <option value="PENDING">Pending</option>
@@ -125,17 +175,41 @@ export default function AdminDashboard() {
                   <option value="RESOLVED">Resolved</option>
                   <option value="ESCALATED">Escalated</option>
                 </select>
+
+                {/* ✅ Refresh button */}
+                <button
+                  type="button"
+                  onClick={loadComplaints}
+                  disabled={loading}
+                  style={{
+                    padding: "1rem 1.5rem", borderRadius: "18px",
+                    border: "1px solid var(--border)", background: "var(--surface)",
+                    color: "var(--text-primary)", fontSize: "0.95rem",
+                    fontWeight: "600", cursor: loading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {loading ? "Loading..." : "↻ Refresh"}
+                </button>
               </div>
 
-              <RecentComplaintsTable complaints={filteredComplaints.slice(0, 8)} />
+              <RecentComplaintsTable
+                complaints={filteredComplaints.slice(0, 8)}
+                loading={loading}
+              />
             </div>
           )}
 
           {selected === "All Complaints"  && <AllComplaints complaints={filteredComplaints} refresh={loadComplaints} />}
           {selected === "Create Officer"  && <CreateOfficerForm />}
           {selected === "OfficerRequest"  && <AdminOfficerRequest />}
-          {selected === "Analytics"       && <AdminAnalytics />}
-          {selected === "Notifications"   && <AdminNotifications />}
+          {selected === "Analytics"       && <AdminAnalytics complaints={complaints} />}
+          {selected === "Notifications"   && (
+            <AdminNotifications
+              notifications={notifications}
+              deleteNotification={deleteNotification}
+              clearAll={clearAllNotifications}
+            />
+          )}
           {selected === "Feedback"        && <AdminFeedback />}
           {selected === "Profile"         && <AdminProfile />}
         </div>

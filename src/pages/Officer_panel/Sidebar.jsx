@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import logoImg from "../../assets/Logo.jpg";
+import { handleLogout } from "../Citizen_panel/Dashboard/Sidebar"; // ✅ Shared logout
 
 const menuItems = [
   { label: "Dashboard",      icon: LayoutGrid },
@@ -19,9 +20,7 @@ const Sidebar = ({ selected, setSelected }) => {
 
   const handleNavigation = (item) => {
     if (item.isLogout) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("role");
-      navigate("/");
+      handleLogout(navigate); // ✅ Clears both storages + replace navigate
     } else {
       setSelected(item.label);
     }
@@ -47,6 +46,7 @@ const Sidebar = ({ selected, setSelected }) => {
                   className={`dashboard-nav-button ${isActive ? "active" : ""}`}
                   onClick={() => handleNavigation(item)}
                   style={item.isLogout ? { color: "var(--accent)" } : {}}
+                  aria-label={item.label}
                 >
                   <Icon size={20} />
                   <span>{item.label}</span>

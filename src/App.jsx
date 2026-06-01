@@ -1,6 +1,6 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import "./App.css";
-import ProtectedRoute from "./pages/Citizen_panel/ProtectedRoute.jsx"; 
+import ProtectedRoute from "./pages/Citizen_panel/ProtectedRoute.jsx";
 import 'leaflet/dist/leaflet.css';
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -11,16 +11,10 @@ import RegisterPage from "./pages/Authentication/RegisterPage.jsx";
 import AdminSignup from "./pages/Authentication/AdminSignup.jsx";
 import ForgotPassword from "./pages/Authentication/ForgotPassword.jsx";
 
-// USER DASHBOARD (Your folder structure)
+// DASHBOARDS
 import UserDashboard from "./pages/Citizen_panel/Dashboard/UserDashboard.jsx";
-
-//officer DASHBOARD
-//import { OfficerDashboard as OfficerDashboard } from "./pages/Officer_panel/Dashboard.jsx";
 import OfficerDashboard from "./pages/Officer_panel/Dashboard.jsx";
-
-
-//admin DASHBOARD
-import AdminDashboard from "./pages/Admin_panel/AdminDashboard.jsx"; 
+import AdminDashboard from "./pages/Admin_panel/AdminDashboard.jsx";
 
 function App() {
   return (
@@ -37,41 +31,48 @@ function App() {
       />
 
       <Routes>
-        {/* LOGIN ROUTES */}
+        {/* AUTH ROUTES */}
         <Route path="/" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/adminsignup" element={<AdminSignup />} />
         <Route path="/forgot-password/:role" element={<ForgotPassword />} />
 
-        {/* USER DASHBOARD ROUTE */}
+        {/* ✅ Hide admin signup in production — remove or protect it */}
+        {import.meta.env.DEV && (
+          <Route path="/adminsignup" element={<AdminSignup />} />
+        )}
+
+        {/* CITIZEN DASHBOARD */}
         <Route
           path="/user-dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["CITIZEN"]}>
               <UserDashboard />
             </ProtectedRoute>
           }
         />
 
-           {/* OFFICER DASHBOARD ✅ */}
-  <Route
-    path="/officer-dashboard"
-    element={
-      <ProtectedRoute>
-        <OfficerDashboard />
-      </ProtectedRoute>
-    }
-  />
+        {/* OFFICER DASHBOARD */}
+        <Route
+          path="/officer-dashboard"
+          element={
+            <ProtectedRoute allowedRoles={["OFFICER"]}>
+              <OfficerDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-{/* ✅ ADMIN DASHBOARD */}
+        {/* ADMIN DASHBOARD */}
         <Route
           path="/admin-dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
               <AdminDashboard />
             </ProtectedRoute>
           }
         />
+
+        {/* ✅ 404 — redirect unknown routes to login */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
