@@ -1,60 +1,139 @@
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  Select,
-  MenuItem,
-  Button
+  Dialog, DialogTitle, DialogContent,
+  DialogActions, Select, MenuItem,
+  Button, CircularProgress, Typography,
 } from "@mui/material";
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
+import api from "../../api/axios"; // ✅ Use configured axios instance
 
 export default function AssignOfficerModal({ complaint, onClose, refresh }) {
-  const [officers, setOfficers] = useState([]);
+  const [officers, setOfficers]   = useState([]);
   const [officerId, setOfficerId] = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [fetching, setFetching]   = useState(true);
 
+  // ── Fetch Available Officers ───────────────────────────────────────────────
   useEffect(() => {
-    axios.get("http://localhost:8081/api/admin/officers", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-    }).then((res) => setOfficers(res.data));
-  }, []);
+    const fetchOfficers = async () => {
+      try {
+        setFetching(true);
+        // ✅ Use workload endpoint — already exists and returns officers with status
+        const res = await api.get("/api/admin/complaints/officers/workload");
+        // ✅ Filter to only show AVAILABLE officers matching complaint category
+        const available = Array.isArray(res.data)
+          ? res.data.filter((o) =>
+              o.status === "AVAILABLE" &&
+              (!complaint?.category || o.department === complaint.category)
+            )
+          : [];
+        setOfficers(available);
+      } catch (error) {
+        toast.error(
+          error?.response?.data?.message ||
+          "Failed to load officers"
+        );
+      } finally {
+        setFetching(false);
+      }
+    };
 
-  const assign = async () => {
-    await axios.post(
-      `http://localhost:8081/api/admin/complaints/${complaint.id}/assign-officer`,
-      { officerId },
-      { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-    );
-    refresh();
-    onClose();
+    fetchOfficers();
+  }, [complaint?.category]);
+
+  // ── Assign Officer ────────────────────────────────────────────────────────
+  const handleAssign = async () => {
+    if (!officerId) return;
+
+    setLoading(true);
+    try {
+      await api.post(
+        `/api/admin/complaints/${complaint.id}/assign-officer`,
+        { officerId }
+      );
+      toast.success("Officer assigned successfully");
+      refresh?.();
+      onClose();
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+        "Failed to assign officer. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <Dialog open onClose={onClose}>
-      <DialogTitle>Assign Officer</DialogTitle>
-      <DialogContent>
-        <Select
-          fullWidth
-          value={officerId}
-          onChange={(e) => setOfficerId(e.target.value)}
-        >
-          {officers.map((o) => (
-            <MenuItem key={o.id} value={o.id}>
-              {o.name} ({o.department})
-            </MenuItem>
-          ))}
-        </Select>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{ sx: { borderRadius: "16px" } }}
+    >
+      <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
+        Assign Officer
+        {complaint?.title && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Complaint: {complaint.title}
+          </Typography>
+        )}
+      </DialogTitle>
 
+      <DialogContent>
+        {fetching ? (
+          <div style={{ display: "flex", justifyContent: "center", padding: "2rem" }}>
+            <CircularProgress size={40} />
+          </div>
+        ) : officers.length === 0 ? (
+          // ✅ Show message if no available officers
+          <Typography color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+            No available officers for this department
+          </Typography>
+        ) : (
+          <Select
+            fullWidth
+            value={officerId}
+            onChange={(e) => setOfficerId(e.target.value)}
+            displayEmpty
+            sx={{ mt: 1, borderRadius: "10px" }}
+          >
+            <MenuItem value="" disabled>
+              Select an officer...
+            </MenuItem>
+            {officers.map((o) => (
+              <MenuItem key={o.id} value={o.id}>
+                {o.name} — {o.department}
+                {/* ✅ Show workload to help admin decide */}
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  ({o.activeComplaints} active)
+                </Typography>
+              </MenuItem>
+            ))}
+          </Select>
+        )}
+      </DialogContent>
+
+      <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+        <Button
+          onClick={onClose}
+          disabled={loading}
+          variant="outlined"
+          sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 600 }}
+        >
+          Cancel
+        </Button>
         <Button
           fullWidth
           variant="contained"
-          sx={{ mt: 2 }}
-          disabled={!officerId}
-          onClick={assign}
+          disabled={!officerId || loading || fetching}
+          onClick={handleAssign}
+          sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700, background: "linear-gradient(135deg, var(--primary), var(--primary-strong))" }}
         >
-          Assign
+          {loading ? <CircularProgress size={20} color="inherit" /> : "Assign Officer"}
         </Button>
-      </DialogContent>
+      </DialogActions>
     </Dialog>
   );
 }
