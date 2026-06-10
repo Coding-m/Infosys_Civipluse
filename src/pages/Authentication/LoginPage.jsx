@@ -1,13 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Lock,
-  Moon,
-  Sun,
-  User,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { Lock, Moon, Sun, User, Eye, EyeOff } from "lucide-react";
 import { toast } from "react-toastify";
 
 import logoImg from "../../assets/Logo.jpg";
@@ -19,36 +12,15 @@ import {
 } from "../../api/auth.js";
 
 const portals = [
-  {
-    id: "user",
-    label: "User Portal",
-    idLabel: "User Email",
-  },
-  {
-    id: "admin",
-    label: "Admin Portal",
-    idLabel: "Admin Email",
-  },
-  {
-    id: "officer",
-    label: "Officer Portal",
-    idLabel: "Officer Email",
-  },
+  { id: "user", label: "User Portal", idLabel: "User Email" },
+  { id: "admin", label: "Admin Portal", idLabel: "Admin Email" },
+  { id: "officer", label: "Officer Portal", idLabel: "Officer Email" },
 ];
 
 const PORTAL_CONFIG = {
-  user: {
-    login: citizenLogin,
-    dashboard: "/user-dashboard",
-  },
-  admin: {
-    login: adminLogin,
-    dashboard: "/admin-dashboard",
-  },
-  officer: {
-    login: officerLogin,
-    dashboard: "/officer-dashboard",
-  },
+  user: { login: citizenLogin, dashboard: "/user-dashboard" },
+  admin: { login: adminLogin, dashboard: "/admin-dashboard" },
+  officer: { login: officerLogin, dashboard: "/officer-dashboard" },
 };
 
 const validateEmail = (email) =>
@@ -57,6 +29,7 @@ const validateEmail = (email) =>
 export default function LoginPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useThemePreference();
+
   const [selectedPortal, setSelectedPortal] = useState("user");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,12 +38,13 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const activePortal = useMemo(
-    () => portals.find((portal) => portal.id === selectedPortal),
+    () => portals.find((p) => p.id === selectedPortal),
     [selectedPortal]
   );
 
   const sliderLeft = useMemo(
-    () => `${portals.findIndex((portal) => portal.id === selectedPortal) * 33.3333}%`,
+    () =>
+      `${portals.findIndex((p) => p.id === selectedPortal) * 33.3333}%`,
     [selectedPortal]
   );
 
@@ -101,33 +75,42 @@ export default function LoginPage() {
           password,
         });
 
-        const token = response?.data?.token;
-        // ✅ Get role from backend response — not portal id
-        const role = response?.data?.role;
+        console.log("LOGIN RESPONSE:", response?.data);
+
+        // 🔥 FIXED: flexible token extraction (handles backend mismatch)
+        const token =
+          response?.data?.token ||
+          response?.data?.jwt ||
+          response?.data?.data?.token;
+
+        const role =
+          response?.data?.role ||
+          response?.data?.data?.role;
 
         if (!token) {
-          throw new Error("Token not received from server.");
+          throw new Error(
+            "Token not received. Check backend response format (token/jwt mismatch)."
+          );
         }
 
         if (!role) {
-          throw new Error("Role not received from server.");
+          throw new Error(
+            "Role not received. Check backend response format."
+          );
         }
 
-        // ✅ Store token and role separately — consistent with ProtectedRoute
+        // ✅ Proper storage (NO duplication now)
         if (rememberMe) {
           localStorage.setItem("token", token);
           localStorage.setItem("role", role);
         } else {
           sessionStorage.setItem("token", token);
           sessionStorage.setItem("role", role);
-          // ✅ Also set in localStorage so ProtectedRoute always finds it
-          localStorage.setItem("token", token);
-          localStorage.setItem("role", role);
         }
 
         toast.success(`${activePortal?.label} Login successful!`);
-        navigate(config.dashboard, { replace: true });
 
+        navigate(config.dashboard, { replace: true });
       } catch (error) {
         console.error("Login Error:", error);
 
@@ -164,7 +147,6 @@ export default function LoginPage() {
           type="button"
           className="theme-toggle"
           onClick={toggleTheme}
-          aria-label="Toggle Theme"
         >
           {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
           <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>
@@ -179,24 +161,17 @@ export default function LoginPage() {
             Unified Smart City Feedback & Redressal System
           </h3>
           <p>
-            Resolve civic issues faster by aligning citizens, officers, and
-            administrators through a single collaborative platform.
+            Resolve civic issues faster by aligning citizens, officers, and administrators.
           </p>
         </section>
 
         <section className="form-panel">
-          <div className="form-panel__header">
-            <div>
-              <p className="eyebrow">Login Portal</p>
-              <h3>{activePortal?.label}</h3>
-            </div>
-          </div>
-
           <div className="portal-toggle">
             <span
               className="portal-toggle__slider"
               style={{ left: sliderLeft }}
             />
+
             {portals.map((portal) => (
               <button
                 key={portal.id}
@@ -217,97 +192,59 @@ export default function LoginPage() {
           </div>
 
           <form className="portal-form" onSubmit={handleLogin}>
-            <div className="text-field">
-              <label htmlFor="portal-email">
-                {activePortal?.idLabel}
-              </label>
-              <div className="input-with-icon">
-                <User size={18} />
-                <input
-                  id="portal-email"
-                  type="email"
-                  autoComplete="email"
-                  maxLength={100}
-                  placeholder={`Enter your ${activePortal?.idLabel.toLowerCase()}`}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value.trimStart())}
-                  required
-                />
-              </div>
-            </div>
+            <input
+              type="email"
+              placeholder={activePortal?.idLabel}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
 
-            <div className="text-field">
-              <label htmlFor="portal-password">Password</label>
-              <div className="input-with-icon">
-                <Lock size={18} />
-                <input
-                  id="portal-password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
+            <div style={{ position: "relative" }}>
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
 
-            <div className="remember-me-row">
-              <label className="remember-me">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                Remember Me
-              </label>
-            </div>
-
-            <div className="form-actions">
               <button
-                type="submit"
-                className="primary-btn"
-                disabled={isLoading}
-                aria-busy={isLoading}
+                type="button"
+                onClick={() => setShowPassword((p) => !p)}
               >
-                {isLoading ? (
-                  <>
-                    <span className="spinner" />
-                    Logging in...
-                  </>
-                ) : (
-                  `Continue to ${activePortal?.label}`
-                )}
+                {showPassword ? <EyeOff /> : <Eye />}
               </button>
+            </div>
 
+            <label>
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              Remember Me
+            </label>
+
+            <button type="submit" disabled={isLoading}>
+              {isLoading ? "Logging in..." : "Login"}
+            </button>
+
+            <div className="links-row">
               {selectedPortal !== "officer" ? (
-                <div className="links-row">
+                <>
                   <Link
                     to={selectedPortal === "user" ? "/register" : "/adminsignup"}
-                    className="secondary-link"
                   >
                     New Account? Sign Up
                   </Link>
-                  <Link
-                    to={`/forgot-password/${selectedPortal}`}
-                    className="secondary-link forgot-password-link"
-                  >
+
+                  <Link to={`/forgot-password/${selectedPortal}`}>
                     Forgot Password?
                   </Link>
-                </div>
+                </>
               ) : (
-                <p className="inline-note">
-                  Officers are added by administrators only. Please contact
-                  your system administrator.
-                </p>
+                <p>Officers are managed by admin only.</p>
               )}
             </div>
           </form>
