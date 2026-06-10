@@ -75,61 +75,103 @@ const SubmitGrievance = ({ setComplaints }) => {
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
 
-    // ✅ Optimistic UI — add temp complaint immediately
-    const tempComplaint = {
-      id: `temp-${Date.now()}`,
-      title: formData.title,
-      description: formData.description,
-      category: formData.category,
-      status: "PENDING",
-      submissionDate: new Date().toISOString(),
-      location: formData.location,
-    };
+  console.log("========== SUBMIT START ==========");
+  console.log("Form Data:", formData);
+  console.log("Coordinates:", coordinates);
+  console.log("Image:", imageFile);
 
-    setComplaints((prev) => [tempComplaint, ...prev]);
-    setLoading(true);
+  const isValid = validateForm();
 
-    try {
-      const fd = new FormData();
-      Object.keys(formData).forEach((k) => fd.append(k, formData[k]));
-      fd.append("latitude", coordinates.lat);
-      fd.append("longitude", coordinates.lng);
-      if (imageFile) fd.append("image", imageFile);
+  console.log("Validation Result:", isValid);
+  console.log("Validation Errors:", errors);
 
-      // ✅ Use api instance — no manual token needed
-      const { data } = await api.post(
-        "/api/citizen/complaints/submit",
-        fd,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-          timeout: 60000, // ✅ 60s for image upload — Cloudinary can be slow
-        }
-      );
+  if (!isValid) {
+    console.log("❌ Validation Failed");
+    return;
+  }
 
-      // ✅ Replace temp with real complaint from server
-      setComplaints((prev) =>
-        prev.map((c) => (c.id === tempComplaint.id ? data : c))
-      );
+  console.log("✅ Validation Passed");
 
-      toast.success(`Grievance submitted! ID: ${data.id}`, { autoClose: 3000 });
-      handleCancel();
-
-    } catch (error) {
-      // ✅ Remove temp complaint on failure
-      setComplaints((prev) =>
-        prev.filter((c) => c.id !== tempComplaint.id)
-      );
-
-      toast.error(
-        error?.response?.data?.message ||
-        "Failed to submit grievance. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
+  // ✅ Optimistic UI
+  const tempComplaint = {
+    id: `temp-${Date.now()}`,
+    title: formData.title,
+    description: formData.description,
+    category: formData.category,
+    status: "PENDING",
+    submissionDate: new Date().toISOString(),
+    location: formData.location,
   };
+
+  setComplaints((prev) => [tempComplaint, ...prev]);
+  setLoading(true);
+
+  try {
+
+    const fd = new FormData();
+
+    Object.keys(formData).forEach((k) => {
+      fd.append(k, formData[k]);
+      console.log("Appending:", k, formData[k]);
+    });
+
+    fd.append("latitude", coordinates.lat);
+    fd.append("longitude", coordinates.lng);
+
+    if (imageFile) {
+      fd.append("image", imageFile);
+    }
+
+    console.log("🚀 Sending Request...");
+
+    const { data } = await api.post(
+      "/api/citizen/complaints/submit",
+      fd,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    console.log("✅ Success:", data);
+
+    setComplaints((prev) =>
+      prev.map((c) => (c.id === tempComplaint.id ? data : c))
+    );
+
+    toast.success(`Grievance submitted! ID: ${data.id}`);
+
+  } catch (error) {
+
+    console.error("❌ FULL ERROR:", error);
+
+    console.error("Status:",
+      error?.response?.status
+    );
+
+    console.error("Response Data:",
+      error?.response?.data
+    );
+
+    console.error("Response:",
+      error?.response
+    );
+
+    toast.error(
+      JSON.stringify(error?.response?.data) ||
+      error.message
+    );
+
+    setComplaints((prev) =>
+      prev.filter((c) => c.id !== tempComplaint.id)
+    );
+
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCancel = () => {
     setFormData(INITIAL_FORM);
