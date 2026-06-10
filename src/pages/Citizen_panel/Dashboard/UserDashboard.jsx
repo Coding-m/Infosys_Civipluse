@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
 import { useThemePreference } from "../../../hooks/useThemePreference.js";
-import api from "../../../api/axios.js"; // ✅ Use configured axios instance
+import api from "../../../api/axios.js";
 
 import Sidebar from "./Sidebar";
 import ComplaintsTable from "./ComplaintsTable";
@@ -13,44 +13,54 @@ import FeedbackContainer from "../Feedback/FeedbackContainer";
 import Profile from "./Profile";
 
 const WS_URL = import.meta.env.VITE_WS_URL;
-const MAX_NOTIFICATIONS = 50; // ✅ Prevent memory bloat
+const MAX_NOTIFICATIONS = 50;
 
 const UserDashboard = () => {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useThemePreference();
 
-  const [selected, setSelected]               = useState("Dashboard");
-  const [complaints, setComplaints]           = useState([]);
-  const [notifications, setNotifications]     = useState([]);
+  const [selected, setSelected] = useState("Dashboard");
+  const [complaints, setComplaints] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [complaintLoading, setComplaintLoading] = useState(false);
-  const [complaintError, setComplaintError]   = useState(null);
+  const [complaintError, setComplaintError] = useState(null);
   const [feedbackComplaint, setFeedbackComplaint] = useState(null);
 
-  // ✅ useRef for WebSocket — prevents stale closures
   const stompClientRef = useRef(null);
 
-  // ✅ Read from both storages — matches ProtectedRoute
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  // ✅ FIX: token in state (prevents refresh bug)
+  const [token, setToken] = useState(null);
 
-  // ── Auth Guard ────────────────────────────────────────────
+  // ── Load token safely after refresh ──
   useEffect(() => {
+    const t =
+      localStorage.getItem("token") ||
+      sessionStorage.getItem("token");
+
+    setToken(t);
+  }, []);
+
+  // ── Auth Guard ──
+  useEffect(() => {
+    if (token === null) return; // wait for token check
+
     if (!token) {
       navigate("/", { replace: true });
     }
   }, [navigate, token]);
 
-  // ── Fetch Complaints ──────────────────────────────────────
+  // ── Fetch Complaints ──
   const fetchComplaints = useCallback(async () => {
     try {
       setComplaintLoading(true);
       setComplaintError(null);
 
-      // ✅ Use api instance — auto attaches token, handles 401
       const response = await api.get("/api/citizen/complaints");
-      setComplaints(Array.isArray(response.data) ? response.data : []);
 
+      setComplaints(
+        Array.isArray(response.data) ? response.data : []
+      );
     } catch (error) {
-      // ✅ Don't show error if 401 — axios interceptor handles redirect
       if (error?.response?.status !== 401) {
         setComplaintError("Failed to load complaints. Please try again.");
       }
@@ -60,47 +70,49 @@ const UserDashboard = () => {
     }
   }, []);
 
-  // ── Initial Fetch ─────────────────────────────────────────
+  // ── Initial fetch AFTER token is ready ──
   useEffect(() => {
-    if (token) fetchComplaints();
-  }, [fetchComplaints, token]);
+    if (token) {
+      fetchComplaints();
+    }
+  }, [token, fetchComplaints]);
 
-  // ── WebSocket Notifications ───────────────────────────────
+  // ── WebSocket Notifications ──
   const subscribeToNotifications = useCallback((stompClient) => {
     stompClient.subscribe("/user/queue/notify", (message) => {
       try {
         const payload = JSON.parse(message.body);
 
-        // ✅ Update complaint status in list
         setComplaints((prev) =>
-          prev.map((complaint) =>
-            complaint.id === payload.complaintId
-              ? { ...complaint, status: payload.status || payload.message }
-              : complaint
+          prev.map((c) =>
+            c.id === payload.complaintId
+              ? { ...c, status: payload.status || payload.message }
+              : c
           )
         );
 
-        // ✅ Add notification with id + timestamp
         setNotifications((prev) => {
           const newNotification = {
             id: Date.now(),
-            message: `Complaint #${payload.complaintId} updated: ${payload.status || payload.message}`,
+            message: `Complaint #${payload.complaintId} updated: ${
+              payload.status || payload.message
+            }`,
             timestamp: new Date().toLocaleTimeString(),
           };
+
           return [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
         });
-
       } catch (e) {
-        console.warn("Failed to parse notification:", e);
+        console.warn("Notification parse error:", e);
       }
     });
   }, []);
 
-  // ── Initialize WebSocket ──────────────────────────────────
+  // ── WebSocket Init ──
   useEffect(() => {
     if (!token) return;
 
-    let isMounted = true; // ✅ Prevent state update on unmounted component
+    let isMounted = true;
 
     const initWebSocket = async () => {
       try {
@@ -111,42 +123,27 @@ const UserDashboard = () => {
 
         const stompClient = new Client({
           webSocketFactory: () => new SockJS(wsUrl),
-          connectHeaders: { Authorization: `Bearer ${token}` },
-          debug: import.meta.env.DEV ? (msg) => console.log("WS:", msg) : () => {},
+          connectHeaders: {
+            Authorization: `Bearer ${token}`,
+          },
           reconnectDelay: 5000,
-          heartbeatIncoming: 10000,
-          heartbeatOutgoing: 10000,
 
           onConnect: () => {
             if (isMounted) {
               subscribeToNotifications(stompClient);
             }
           },
-
-          onStompError: (frame) => {
-            console.error("WebSocket broker error:", frame.headers?.message);
-          },
-
-          onWebSocketError: (error) => {
-            console.error("WebSocket connection error:", error);
-          },
-
-          onDisconnect: () => {
-            console.info("WebSocket disconnected");
-          },
         });
 
         stompClient.activate();
         stompClientRef.current = stompClient;
-
       } catch (error) {
-        console.error("WebSocket initialization failed:", error);
+        console.error("WebSocket init failed:", error);
       }
     };
 
     initWebSocket();
 
-    // ✅ Cleanup on unmount
     return () => {
       isMounted = false;
       if (stompClientRef.current) {
@@ -156,7 +153,7 @@ const UserDashboard = () => {
     };
   }, [token, subscribeToNotifications]);
 
-  // ── Render ────────────────────────────────────────────────
+  // ── Render ──
   return (
     <div className="dashboard-shell">
       <Sidebar
@@ -169,18 +166,12 @@ const UserDashboard = () => {
       <div className="dashboard-content">
         {/* Header */}
         <header className="dashboard-header">
-          <h1 className="dashboard-header-title">Citizen Dashboard</h1>
-          <div className="dashboard-header-actions">
-            <button
-              type="button"
-              className="theme-toggle"
-              onClick={toggleTheme}
-              aria-label="Toggle Theme"
-            >
-              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
-            </button>
-          </div>
+          <h1>Citizen Dashboard</h1>
+
+          <button onClick={toggleTheme} className="theme-toggle">
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            <span>{theme === "dark" ? "Light" : "Dark"}</span>
+          </button>
         </header>
 
         {/* Body */}
@@ -191,8 +182,8 @@ const UserDashboard = () => {
               loading={complaintLoading}
               error={complaintError}
               fetchComplaints={fetchComplaints}
-              onFeedback={(complaint) => {
-                setFeedbackComplaint(complaint);
+              onFeedback={(c) => {
+                setFeedbackComplaint(c);
                 setSelected("Feedback");
               }}
             />
@@ -228,9 +219,7 @@ const UserDashboard = () => {
             />
           )}
 
-          {selected === "My Profile" && (
-            <Profile navigate={navigate} />
-          )}
+          {selected === "My Profile" && <Profile navigate={navigate} />}
         </div>
       </div>
     </div>
