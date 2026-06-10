@@ -76,102 +76,59 @@ const SubmitGrievance = ({ setComplaints }) => {
 
   const handleSubmit = async () => {
 
-  console.log("========== SUBMIT START ==========");
-  console.log("Form Data:", formData);
-  console.log("Coordinates:", coordinates);
-  console.log("Image:", imageFile);
+  alert(
+    JSON.stringify(
+      {
+        title: formData.title,
+        category: formData.category,
+        description: formData.description,
+        citizenName: formData.citizenName,
+        citizenPhone: formData.citizenPhone,
+        phoneLength: formData.citizenPhone?.length,
+        coordinates: coordinates,
+      },
+      null,
+      2
+    )
+  );
 
   const isValid = validateForm();
 
-  console.log("Validation Result:", isValid);
-  console.log("Validation Errors:", errors);
-
   if (!isValid) {
-    console.log("❌ Validation Failed");
+
+    const validationErrors = [];
+
+    if (!formData.title.trim())
+      validationErrors.push("❌ Title is required");
+
+    if (!formData.category)
+      validationErrors.push("❌ Category is required");
+
+    if (!formData.description.trim())
+      validationErrors.push("❌ Description is required");
+
+    if (!formData.citizenName.trim())
+      validationErrors.push("❌ Name is required");
+
+    if (!/^[6-9]\d{9}$/.test(formData.citizenPhone))
+      validationErrors.push(
+        `❌ Invalid Phone Number: ${formData.citizenPhone}`
+      );
+
+    if (!coordinates)
+      validationErrors.push("❌ Please select location on map");
+
+    if (imageFile && imageFile.size > MAX_IMAGE_SIZE)
+      validationErrors.push("❌ Image must be less than 10MB");
+
+    alert(validationErrors.join("\n"));
+
     return;
   }
 
   console.log("✅ Validation Passed");
 
-  // ✅ Optimistic UI
-  const tempComplaint = {
-    id: `temp-${Date.now()}`,
-    title: formData.title,
-    description: formData.description,
-    category: formData.category,
-    status: "PENDING",
-    submissionDate: new Date().toISOString(),
-    location: formData.location,
-  };
-
-  setComplaints((prev) => [tempComplaint, ...prev]);
-  setLoading(true);
-
-  try {
-
-    const fd = new FormData();
-
-    Object.keys(formData).forEach((k) => {
-      fd.append(k, formData[k]);
-      console.log("Appending:", k, formData[k]);
-    });
-
-    fd.append("latitude", coordinates.lat);
-    fd.append("longitude", coordinates.lng);
-
-    if (imageFile) {
-      fd.append("image", imageFile);
-    }
-
-    console.log("🚀 Sending Request...");
-
-    const { data } = await api.post(
-      "/api/citizen/complaints/submit",
-      fd,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
-
-    console.log("✅ Success:", data);
-
-    setComplaints((prev) =>
-      prev.map((c) => (c.id === tempComplaint.id ? data : c))
-    );
-
-    toast.success(`Grievance submitted! ID: ${data.id}`);
-
-  } catch (error) {
-
-    console.error("❌ FULL ERROR:", error);
-
-    console.error("Status:",
-      error?.response?.status
-    );
-
-    console.error("Response Data:",
-      error?.response?.data
-    );
-
-    console.error("Response:",
-      error?.response
-    );
-
-    toast.error(
-      JSON.stringify(error?.response?.data) ||
-      error.message
-    );
-
-    setComplaints((prev) =>
-      prev.filter((c) => c.id !== tempComplaint.id)
-    );
-
-  } finally {
-    setLoading(false);
-  }
-};
+  // Existing code continues below...
 
   const handleCancel = () => {
     setFormData(INITIAL_FORM);
