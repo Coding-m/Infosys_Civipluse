@@ -49,31 +49,38 @@ const UserDashboard = () => {
     }
   }, [navigate, token]);
 
-  // ── Fetch Complaints ──
-const fetchComplaints = useCallback(async () => {
+ const fetchComplaints = useCallback(async () => {
   try {
     setComplaintLoading(true);
     setComplaintError(null);
 
-    console.log("TOKEN:", localStorage.getItem("token"));
-
     const response = await api.get("/api/citizen/complaints");
 
-    console.log("STATUS:", response.status);
-    console.log("DATA:", response.data);
+    console.log("API RESPONSE:", response.data);
 
-    setComplaints(
-      Array.isArray(response.data) ? response.data : []
-    );
+    const data = response.data;
+
+    // Spring Page response
+    if (data && Array.isArray(data.content)) {
+      setComplaints(data.content);
+    } 
+    // fallback if backend returns array
+    else if (Array.isArray(data)) {
+      setComplaints(data);
+    } 
+    else {
+      setComplaints([]);
+    }
 
   } catch (error) {
 
     console.log("ERROR STATUS:", error?.response?.status);
     console.log("ERROR DATA:", error?.response?.data);
-    console.log("FULL ERROR:", error);
 
     if (error?.response?.status !== 401) {
-      setComplaintError("Failed to load complaints. Please try again.");
+      setComplaintError(
+        "Failed to load complaints. Please try again."
+      );
     }
 
     setComplaints([]);
@@ -82,12 +89,6 @@ const fetchComplaints = useCallback(async () => {
     setComplaintLoading(false);
   }
 }, []);
-  // ── Initial fetch AFTER token is ready ──
-  useEffect(() => {
-    if (token) {
-      fetchComplaints();
-    }
-  }, [token, fetchComplaints]);
 
   // ── WebSocket Notifications ──
   const subscribeToNotifications = useCallback((stompClient) => {
