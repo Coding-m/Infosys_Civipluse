@@ -50,25 +50,25 @@ const UserDashboard = () => {
   }, [navigate, token]);
 
   // ── Fetch Complaints ──
-  const fetchComplaints = useCallback(async () => {
-    try {
-      setComplaintLoading(true);
-      setComplaintError(null);
+const fetchComplaints = useCallback(async () => {
+  try {
+    setComplaintLoading(true);
+    setComplaintError(null);
 
-      const response = await api.get("/api/citizen/complaints");
+    const response = await api.get("/api/citizen/complaints");
 
-      setComplaints(
-        Array.isArray(response.data) ? response.data : []
-      );
-    } catch (error) {
-      if (error?.response?.status !== 401) {
-        setComplaintError("Failed to load complaints. Please try again.");
-      }
-      setComplaints([]);
-    } finally {
-      setComplaintLoading(false);
+    setComplaints(
+      Array.isArray(response.data) ? response.data : []
+    );
+  } catch (error) {
+    if (error?.response?.status !== 401) {
+      setComplaintError("Failed to load complaints. Please try again.");
     }
-  }, []);
+    setComplaints([]);
+  } finally {
+    setComplaintLoading(false);
+  }
+}, []);
 
   // ── Initial fetch AFTER token is ready ──
   useEffect(() => {
