@@ -15,23 +15,7 @@ export default function AdminSignup() {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ Block access in production — admin signup is dev only
-  if (import.meta.env.PROD) {
-    return (
-      <div className="page">
-        <main className="auth-shell">
-          <section className="form-panel">
-            <h2>Access Denied</h2>
-            <p>Admin registration is not available in production.</p>
-            <Link to="/" className="secondary-link">
-              <ArrowLeft size={18} /> Back to Login
-            </Link>
-          </section>
-        </main>
-      </div>
-    );
-  }
-
+ 
   const handleChange = (e) => {
     setForm({
       ...form,
