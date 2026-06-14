@@ -35,11 +35,8 @@ function App() {
         <Route path="/" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password/:role" element={<ForgotPassword />} />
+        <Route path="/adminsignup" element={<AdminSignup />} />
 
-        {/* ✅ Hide admin signup in production — remove or protect it */}
-        {import.meta.env.DEV && (
-          <Route path="/adminsignup" element={<AdminSignup />} />
-        )}
 
         {/* CITIZEN DASHBOARD */}
         <Route
